@@ -80,7 +80,7 @@ export default function GoalsScreen() {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1, backgroundColor: BG }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Pressable style={{ flex: 1 }} onPress={Keyboard.dismiss}>
+      <Pressable style={{ flex: 1 }} onPress={Platform.OS !== 'web' ? Keyboard.dismiss : undefined}>
         <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
 
           <Text style={styles.sectionLabel}>Presets</Text>

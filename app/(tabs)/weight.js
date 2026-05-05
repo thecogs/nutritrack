@@ -328,7 +328,7 @@ const s = StyleSheet.create({
 
   inputRow:    { flexDirection: 'row', alignItems: 'center', gap: 10 },
   weightInput: {
-    flex: 1, color: TEXT, fontSize: 34, fontWeight: '800',
+    flex: 1, minWidth: 0, color: TEXT, fontSize: 34, fontWeight: '800',
     backgroundColor: BG, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10,
   },
   unit:   { color: DIM, fontSize: 16, fontWeight: '600' },
