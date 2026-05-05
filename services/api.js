@@ -1,10 +1,4 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// NutriTrack · api.js
-//
-// AI: Claude (Anthropic) — used for food photo scanning, natural-language
-//     description, and the nutrition advisor.
-// Nutrition DB: USDA FoodData Central + Open Food Facts (both free, no quota).
-// ─────────────────────────────────────────────────────────────────────────────
+import { Platform } from 'react-native';
 
 const ANTHROPIC_API_KEY = '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';
 const USDA_API_KEY      = 'DEMO_KEY';                     // swap for a real key at api.nal.usda.gov
@@ -33,19 +27,14 @@ function toTitleCase(str) {
 // ── Claude API wrapper ────────────────────────────────────────────────────────
 
 async function claude(body, ms = 18000) {
-  const res = await fetchWithTimeout(
-    'https://api.anthropic.com/v1/messages',
-    {
-      method:  'POST',
-      headers: {
-        'x-api-key':         ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-        'content-type':      'application/json',
-      },
-      body: JSON.stringify(body),
-    },
-    ms
-  );
+  const isWeb = Platform.OS === 'web';
+  const url     = isWeb ? '/api/proxy' : 'https://api.anthropic.com/v1/messages';
+  const headers = { 'content-type': 'application/json' };
+  if (!isWeb) {
+    headers['x-api-key']         = ANTHROPIC_API_KEY;
+    headers['anthropic-version'] = '2023-06-01';
+  }
+  const res  = await fetchWithTimeout(url, { method: 'POST', headers, body: JSON.stringify(body) }, ms);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `Claude error ${res.status}`);
   return data.content?.[0]?.text ?? '';

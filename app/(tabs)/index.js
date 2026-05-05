@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View, Text, TouchableOpacity,
-  StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator,
+  StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getTodayLogs, getGoals, deleteLog, addLog } from '../../services/db';
@@ -491,7 +491,13 @@ export default function LogScreen() {
   const calPct    = Math.min((totals.calories / (goals.calories || 1)) * 100, 100);
   const over      = totals.calories > goals.calories;
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Remove this entry?')) return;
+      await deleteLog(id);
+      setLogs((await getTodayLogs()) || []);
+      return;
+    }
     Alert.alert('Remove entry?', '', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {

@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
-  ScrollView, ActivityIndicator, Alert, Dimensions,
+  ScrollView, ActivityIndicator, Alert, Dimensions, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Svg, { Path, Line, Circle, Text as SvgText, G } from 'react-native-svg';
@@ -171,7 +171,14 @@ export default function WeightScreen() {
     }
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
+    if (Platform.OS === 'web') {
+      if (!window.confirm('Remove this entry?')) return;
+      await deleteWeight(id);
+      await load();
+      if (allLogs.find((l) => l.id === id)?.date === today) setInput('');
+      return;
+    }
     Alert.alert('Remove entry?', '', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Remove', style: 'destructive', onPress: async () => {
