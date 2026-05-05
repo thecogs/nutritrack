@@ -200,6 +200,54 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
   });
 }
 
+// ── Smart describe: regex → USDA first, Claude fallback ──────────────────────
+
+const UNIT_GRAMS = {
+  g:1, gram:1, grams:1,
+  oz:28.35, ounce:28.35, ounces:28.35,
+  lb:453.6, lbs:453.6, pound:453.6, pounds:453.6,
+  tbsp:15, tablespoon:15, tablespoons:15,
+  tsp:5, teaspoon:5, teaspoons:5,
+};
+
+function parseQuantityText(text) {
+  const t = text.toLowerCase().trim();
+  const up = Object.keys(UNIT_GRAMS).join('|');
+  // "{qty} {unit} {food}" — "200g chicken breast", "6 oz salmon"
+  let m = t.match(new RegExp(`^([\\d./]+)\\s*(${up})\\.?\\s+(.+)$`));
+  if (m) return { grams: (parseFloat(m[1]) || 1) * (UNIT_GRAMS[m[2]] || 1), food: m[3].trim() };
+  // "{food} {qty}{unit}" — "chicken 200g", "salmon 6oz"
+  m = t.match(new RegExp(`^(.+?)\\s+([\\d.]+)\\s*(${up})\\.?$`));
+  if (m) return { grams: (parseFloat(m[2]) || 1) * (UNIT_GRAMS[m[3]] || 1), food: m[1].trim() };
+  // No unit → plain food name, use 100g as base
+  return { grams: 100, food: t };
+}
+
+export async function smartDescribeFoods(text) {
+  const trimmed = text.trim();
+  if (!trimmed) return describeFoods(text);
+  try {
+    const { grams, food } = parseQuantityText(trimmed);
+    if (food.length >= 3) {
+      const results = await searchWholeFoods(food);
+      if (results.length > 0) {
+        const best  = results[0];
+        const scale = grams / 100;
+        return [{
+          food_name: trimmed,
+          calories:  Math.round(best.calories * scale),
+          protein:   Math.round(best.protein  * scale * 10) / 10,
+          carbs:     Math.round(best.carbs    * scale * 10) / 10,
+          fat:       Math.round(best.fat      * scale * 10) / 10,
+          fiber:     Math.round((best.fiber || 0) * scale * 10) / 10,
+        }];
+      }
+    }
+  } catch {}
+  // Fall back to Claude for anything the DB can't handle
+  return describeFoods(text);
+}
+
 // ── Claude text — natural language food description ───────────────────────────
 // Returns an array of food objects. Single food → 1-element array.
 // Multi-item descriptions ("mac and cheese and two hot dogs") → multiple elements.

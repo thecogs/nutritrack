@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity } from '../../services/db';
-import { describeFoods, searchFood } from '../../services/api';
+import { smartDescribeFoods, searchFood } from '../../services/api';
 import { getDefaultMealType } from '../../services/mealTime';
 
 const G    = '#471914';
@@ -96,7 +96,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
     if (!text.trim() || estimating) return;
     pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setEstimating(true);
     try {
-      const foods = await describeFoods(text.trim());
+      const foods = await smartDescribeFoods(text.trim());
       if (foods.length === 1) {
         const food = foods[0];
         setText(food.food_name || text.trim()); setBase(null);
