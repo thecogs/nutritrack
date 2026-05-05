@@ -11,6 +11,9 @@
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
     "axios": "^1.6.2",
+    "expo-constants": "~17.0.0",
+    "expo-linking": "~7.0.0",
+    "expo-splash-screen": "~0.29.0",
     "react-dom": "19.1.0",
     "react-native-web": "^0.21.0",
     "expo": "~54.0.0",
