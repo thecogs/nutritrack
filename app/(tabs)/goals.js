@@ -124,64 +124,6 @@ export default function GoalsScreen() {
       <Pressable style={{ flex: 1 }} onPress={Platform.OS !== 'web' ? Keyboard.dismiss : undefined}>
         <ScrollView style={s.container} contentContainerStyle={s.content} keyboardDismissMode="on-drag">
 
-          {/* ── Body Stats ── */}
-          <Text style={s.sectionLabel}>Body Stats</Text>
-          <View style={s.statsCard}>
-            {/* Height */}
-            <View style={s.statRow}>
-              <Text style={s.statLabel}>Height</Text>
-              <View style={s.statInputRow}>
-                <TextInput
-                  style={s.statInput} value={heightIn} onChangeText={setHeightIn}
-                  keyboardType="decimal-pad" placeholder="70" placeholderTextColor="#404060"
-                />
-                <Text style={s.statUnit}>in</Text>
-                {h > 0 && <Text style={s.statHint}>  {feet}′ {inches}″</Text>}
-              </View>
-            </View>
-
-            {/* Weight */}
-            <View style={[s.statRow, { marginTop: 14 }]}>
-              <Text style={s.statLabel}>Today's Weight</Text>
-              <View style={s.statInputRow}>
-                <TextInput
-                  style={s.statInput} value={weightInput} onChangeText={setWeightInput}
-                  keyboardType="decimal-pad" placeholder="175" placeholderTextColor="#404060"
-                />
-                <Text style={s.statUnit}>lbs</Text>
-                <TouchableOpacity style={s.logWeightBtn} onPress={handleLogWeight} disabled={savingWeight}>
-                  <Text style={s.logWeightBtnText}>{savingWeight ? '…' : 'Log'}</Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-
-            {/* BMI */}
-            {bmiVal !== null && (
-              <View style={s.bmiRow}>
-                <Text style={s.bmiLabel}>BMI</Text>
-                <Text style={[s.bmiValue, { color: bmiCat.color }]}>{bmiVal.toFixed(1)}</Text>
-                <Text style={[s.bmiCat, { color: bmiCat.color }]}>{bmiCat.label}</Text>
-              </View>
-            )}
-          </View>
-
-          {/* ── Activity ── */}
-          <Text style={s.sectionLabel}>Activity</Text>
-          <View style={s.statsCard}>
-            <View style={s.toggleRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={s.toggleTitle}>Count activity towards calorie budget</Text>
-                <Text style={s.toggleSub}>Activity burns increase your daily calorie allowance</Text>
-              </View>
-              <Switch
-                value={includeActivity}
-                onValueChange={setIncludeActivity}
-                trackColor={{ false: SURF, true: G }}
-                thumbColor={includeActivity ? TEXT : DIM}
-              />
-            </View>
-          </View>
-
           {/* ── Presets ── */}
           <Text style={s.sectionLabel}>Presets</Text>
           <View style={s.presetRow}>
@@ -215,6 +157,59 @@ export default function GoalsScreen() {
           <TouchableOpacity style={[s.saveBtn, saved && s.saveBtnDone]} onPress={handleSave}>
             <Text style={s.saveBtnText}>{saved ? '✓  Saved' : 'Save Goals'}</Text>
           </TouchableOpacity>
+
+          {/* ── Activity ── */}
+          <Text style={[s.sectionLabel, { marginTop: 24 }]}>Activity</Text>
+          <View style={s.statsCard}>
+            <View style={s.toggleRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={s.toggleTitle}>Count activity towards calorie budget</Text>
+                <Text style={s.toggleSub}>Activity burns increase your daily calorie allowance</Text>
+              </View>
+              <Switch
+                value={includeActivity}
+                onValueChange={setIncludeActivity}
+                trackColor={{ false: SURF, true: G }}
+                thumbColor={includeActivity ? TEXT : DIM}
+              />
+            </View>
+          </View>
+
+          {/* ── Body Stats ── */}
+          <Text style={[s.sectionLabel, { marginTop: 24 }]}>Body Stats</Text>
+          <View style={s.statsCard}>
+            <View style={s.statRow}>
+              <Text style={s.statLabel}>Height</Text>
+              <View style={s.statInputRow}>
+                <TextInput
+                  style={s.statInput} value={heightIn} onChangeText={setHeightIn}
+                  keyboardType="decimal-pad" placeholder="70" placeholderTextColor="#404060"
+                />
+                <Text style={s.statUnit}>in</Text>
+                {h > 0 && <Text style={s.statHint}>  {feet}′ {inches}″</Text>}
+              </View>
+            </View>
+            <View style={[s.statRow, { marginTop: 14 }]}>
+              <Text style={s.statLabel}>Today's Weight</Text>
+              <View style={s.statInputRow}>
+                <TextInput
+                  style={s.statInput} value={weightInput} onChangeText={setWeightInput}
+                  keyboardType="decimal-pad" placeholder="175" placeholderTextColor="#404060"
+                />
+                <Text style={s.statUnit}>lbs</Text>
+                <TouchableOpacity style={s.logWeightBtn} onPress={handleLogWeight} disabled={savingWeight}>
+                  <Text style={s.logWeightBtnText}>{savingWeight ? '…' : 'Log'}</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+            {bmiVal !== null && (
+              <View style={s.bmiRow}>
+                <Text style={s.bmiLabel}>BMI</Text>
+                <Text style={[s.bmiValue, { color: bmiCat.color }]}>{bmiVal.toFixed(1)}</Text>
+                <Text style={[s.bmiCat, { color: bmiCat.color }]}>{bmiCat.label}</Text>
+              </View>
+            )}
+          </View>
 
         </ScrollView>
       </Pressable>

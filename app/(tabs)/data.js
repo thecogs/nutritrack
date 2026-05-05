@@ -1,9 +1,9 @@
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, Dimensions } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Dimensions, Alert, Platform } from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import Svg, { Path, Line, Rect, Circle, Text as SvgText, G as SvgG } from 'react-native-svg';
-import { getDailyCalorieTotals, getWeightLogs, getGoals } from '../../services/db';
+import { getDailyCalorieTotals, getWeightLogs, getGoals, getAllFoodLogs, getWeightLogs as getWeightLogsAll, importFromCSV } from '../../services/db';
 
 const ACCENT = '#471914';
 const BG     = '#070F05';
@@ -178,6 +178,41 @@ function PeriodPicker({ periods, selected, onSelect }) {
 
 // ── Main screen ───────────────────────────────────────────────────────────────
 
+async function exportCSV() {
+  try {
+    const [foodLogs, weightLogs] = await Promise.all([getAllFoodLogs(), getWeightLogs(3650)]);
+    const today = new Date().toISOString().split('T')[0];
+    const csvField = (v) => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g,'""')}"` : s; };
+    let csv = 'FOOD LOGS\nDate,Meal,Food,Calories,Protein (g),Carbs (g),Fat (g),Fiber (g)\n';
+    foodLogs.forEach((l) => { csv += [l.date||(l.timestamp?.split('T')[0]||''), l.meal_type, csvField(l.food_name), l.calories, l.protein, l.carbs, l.fat, l.fiber??0].join(',') + '\n'; });
+    csv += '\nWEIGHT LOGS\nDate,Weight (lbs)\n';
+    weightLogs.forEach((w) => { csv += `${w.date},${w.weight}\n`; });
+    const filename = `nutritrack-${today}.csv`;
+    if (Platform.OS === 'web') {
+      const blob = new Blob([csv], { type: 'text/csv' });
+      const file = new File([blob], filename, { type: 'text/csv' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], title: 'NutriTrack Export' }); }
+      else { const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
+    }
+  } catch (err) { if (err?.name !== 'AbortError') Alert.alert('Export failed', 'Could not export data.'); }
+}
+
+async function importCSV() {
+  if (Platform.OS !== 'web') { Alert.alert('Import', 'CSV import is available on web only.'); return; }
+  const input = document.createElement('input');
+  input.type = 'file'; input.accept = '.csv,text/csv';
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const result = await importFromCSV(text);
+      Alert.alert('Import complete', `Imported ${result.food} food entries and ${result.weight} weight entries.`);
+    } catch (err) { Alert.alert('Import failed', err.message || 'Could not parse CSV.'); }
+  };
+  input.click();
+}
+
 export default function DataScreen() {
   const [calPeriod,    setCalPeriod]    = useState(30);
   const [weightPeriod, setWeightPeriod] = useState(30);
@@ -295,6 +330,15 @@ export default function DataScreen() {
         )}
       </View>
 
+      {/* ── Import / Export ── */}
+      <Text style={[s.sectionTitle, { marginTop: 24 }]}>DATA</Text>
+      <TouchableOpacity style={s.csvBtn} onPress={importCSV}>
+        <Text style={s.csvBtnText}>Import CSV</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[s.csvBtn, { marginTop: 8 }]} onPress={exportCSV}>
+        <Text style={s.csvBtnText}>Export All Data as CSV</Text>
+      </TouchableOpacity>
+
     </ScrollView>
   );
 }
@@ -324,4 +368,7 @@ const s = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   legendDot:  { width: 10, height: 10, borderRadius: 5 },
   legendText: { color: DIM, fontSize: 11 },
+
+  csvBtn:     { paddingVertical: 14, borderRadius: 14, backgroundColor: CARD, borderWidth: 1, borderColor: 'rgba(71,25,20,0.5)', alignItems: 'center' },
+  csvBtnText: { color: TEXT, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
 });

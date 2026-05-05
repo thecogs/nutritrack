@@ -223,13 +223,6 @@ export default function HistoryScreen() {
         );
       })}
 
-      {/* Import / Export */}
-      <TouchableOpacity style={styles.exportBtn} onPress={importCSV}>
-        <Text style={styles.exportBtnText}>Import CSV</Text>
-      </TouchableOpacity>
-      <TouchableOpacity style={[styles.exportBtn, { marginTop: 8 }]} onPress={exportCSV}>
-        <Text style={styles.exportBtnText}>Export All Data as CSV</Text>
-      </TouchableOpacity>
     </ScrollView>
   );
 }
