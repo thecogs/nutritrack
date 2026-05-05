@@ -36,6 +36,7 @@ function MacroPill({ label, current, goal, color }) {
       <Text style={[styles.macroPillVal, { color: over ? '#E05555' : color }]}>
         {Math.round(current)}<Text style={styles.macroPillUnit}>g</Text>
       </Text>
+      <Text style={styles.macroPillGoal}>/ {goal}g</Text>
       <View style={styles.macroPillTrack}>
         <View style={[styles.macroPillFill, { width: `${pct}%`, backgroundColor: over ? '#E05555' : color }]} />
       </View>
@@ -537,6 +538,7 @@ const styles = StyleSheet.create({
   macroPillUnit:  { fontSize: 10, fontWeight: '600' },
   macroPillTrack: { width: '100%', height: 3, backgroundColor: SURF, borderRadius: 2, overflow: 'hidden', marginTop: 6, marginBottom: 4 },
   macroPillFill:  { height: '100%', borderRadius: 2 },
+  macroPillGoal:  { color: '#4A4D5E', fontSize: 10, fontWeight: '600', marginTop: 1 },
   macroPillLabel: { color: '#4A4D5E', fontSize: 10, fontWeight: '600' },
 
   activitySection: { backgroundColor: CARD, borderRadius: 14, padding: 14, marginBottom: 16 },
