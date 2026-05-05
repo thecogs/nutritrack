@@ -493,7 +493,6 @@ export default function LogScreen() {
 
   const handleDelete = async (id) => {
     if (Platform.OS === 'web') {
-      if (!window.confirm('Remove this entry?')) return;
       await deleteLog(id);
       setLogs((await getTodayLogs()) || []);
       return;

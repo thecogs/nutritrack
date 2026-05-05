@@ -173,10 +173,10 @@ export default function WeightScreen() {
 
   const handleDelete = async (id) => {
     if (Platform.OS === 'web') {
-      if (!window.confirm('Remove this entry?')) return;
+      const wasToday = allLogs.find((l) => l.id === id)?.date === today;
       await deleteWeight(id);
       await load();
-      if (allLogs.find((l) => l.id === id)?.date === today) setInput('');
+      if (wasToday) setInput('');
       return;
     }
     Alert.alert('Remove entry?', '', [
