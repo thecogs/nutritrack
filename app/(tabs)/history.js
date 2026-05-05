@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs } from '../../services/db';
+import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV } from '../../services/db';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -30,6 +30,32 @@ function csvField(val) {
   const s = String(val);
   return s.includes(',') || s.includes('"') || s.includes('\n')
     ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+async function importCSV() {
+  try {
+    if (Platform.OS !== 'web') {
+      Alert.alert('Import', 'CSV import is available on web only.');
+      return;
+    }
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const text = await file.text();
+      try {
+        const result = await importFromCSV(text);
+        Alert.alert('Import complete', `Imported ${result.food} food entries and ${result.weight} weight entries.`);
+      } catch (err) {
+        Alert.alert('Import failed', err.message || 'Could not parse CSV.');
+      }
+    };
+    input.click();
+  } catch (err) {
+    Alert.alert('Import failed', err.message || 'Something went wrong.');
+  }
 }
 
 async function exportCSV() {
@@ -197,8 +223,11 @@ export default function HistoryScreen() {
         );
       })}
 
-      {/* Export */}
-      <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
+      {/* Import / Export */}
+      <TouchableOpacity style={styles.exportBtn} onPress={importCSV}>
+        <Text style={styles.exportBtnText}>Import CSV</Text>
+      </TouchableOpacity>
+      <TouchableOpacity style={[styles.exportBtn, { marginTop: 8 }]} onPress={exportCSV}>
         <Text style={styles.exportBtnText}>Export All Data as CSV</Text>
       </TouchableOpacity>
     </ScrollView>

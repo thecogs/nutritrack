@@ -2,10 +2,10 @@ import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { View, StyleSheet } from 'react-native';
 
-const BG     = '#070F05';
-const CARD   = '#0D1B0B';
-const GREEN  = '#471914';
-const DIM    = '#5A5248';
+const BG    = '#070F05';
+const CARD  = '#0D1B0B';
+const GREEN = '#471914';
+const DIM   = '#5A5248';
 
 function TabIcon({ name, focused }) {
   return (
@@ -48,31 +48,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="scan"
-        options={{
-          title: 'Scan',
-          tabBarIcon: ({ focused }) => <TabIcon name="barcode-outline" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="camera"
-        options={{
-          title: 'Camera',
-          tabBarIcon: ({ focused }) => <TabIcon name="camera-outline" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
-        name="weight"
-        options={{
-          title: 'Weight',
-          tabBarIcon: ({ focused }) => <TabIcon name="trending-up-outline" focused={focused} />,
-        }}
-      />
-      <Tabs.Screen
         name="history"
         options={{
           title: 'History',
           tabBarIcon: ({ focused }) => <TabIcon name="calendar-outline" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="aitrack"
+        options={{
+          title: 'AI Track',
+          tabBarIcon: ({ focused }) => <TabIcon name="scan-outline" focused={focused} />,
+        }}
+      />
+      <Tabs.Screen
+        name="data"
+        options={{
+          title: 'Data',
+          tabBarIcon: ({ focused }) => <TabIcon name="bar-chart-outline" focused={focused} />,
         }}
       />
       <Tabs.Screen
@@ -89,6 +82,11 @@ export default function TabLayout() {
           tabBarIcon: ({ focused }) => <TabIcon name="chatbubbles-outline" focused={focused} />,
         }}
       />
+
+      {/* Hidden legacy tabs — functionality moved into new tabs */}
+      <Tabs.Screen name="scan"   options={{ href: null }} />
+      <Tabs.Screen name="camera" options={{ href: null }} />
+      <Tabs.Screen name="weight" options={{ href: null }} />
     </Tabs>
   );
 }

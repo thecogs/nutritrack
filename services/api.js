@@ -269,6 +269,10 @@ export async function getAdvice(messages, userGoals, todayLog) {
     `- Reference the user's actual logged numbers\n` +
     `- Suggest specific foods with portions ("6 oz chicken breast adds ~50 g protein")\n` +
     `- Be direct and encouraging — no filler phrases\n\n` +
+    `## Updating goals\n` +
+    `If the user explicitly asks you to update, change, or set their macro/calorie goals, apply sensible values and append EXACTLY this at the very end of your message (nothing after it):\n` +
+    `GOALS_UPDATE:{"calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}\n` +
+    `Use whole numbers. Only include this when actually changing goals.\n\n` +
     `## User's live data\n` +
     `Goals:     ${goals.calories} kcal | P ${goals.protein}g | C ${goals.carbs}g | F ${goals.fat}g | Fiber ${goals.fiber || 30}g\n` +
     `Today:     ${Math.round(totals.calories)} kcal | P ${Math.round(totals.protein)}g | C ${Math.round(totals.carbs)}g | F ${Math.round(totals.fat)}g | Fiber ${Math.round(totals.fiber)}g\n` +
