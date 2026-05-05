@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "NutriTrack",
+    "slug": "nutritrack",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "scheme": "nutritrack",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NutriTrack needs camera access to scan food."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "NutriTrack uses the camera to photograph your food for AI analysis.",
+          "photosPermission": "NutriTrack uses photos to analyze your food."
+        }
+      ],
+      "expo-asset",
+      "expo-sqlite"
+    ],
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#1a1a2e"
+      }
+    },
+    "ios": {
+      "bundleIdentifier": "com.personal.nutritrack",
+      "supportsTablet": false
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "static"
+    }
+  }
+}
