@@ -24,8 +24,8 @@ const MACRO_DEFS = [
   { key: 'calories', label: 'Calories', unit: 'kcal', color: '#E05555' },
   { key: 'protein',  label: 'Protein',  unit: 'g',    color: '#CE5400' },
   { key: 'carbs',    label: 'Carbs',    unit: 'g',    color: '#08C343' },
-  { key: 'fat',      label: 'Fat',      unit: 'g',    color: '#215CDA' },
-  { key: 'fiber',    label: 'Fiber',    unit: 'g',    color: '#A101C9' },
+  { key: 'fat',      label: 'Fat',      unit: 'g',    color: '#FFD700' },
+  { key: 'fiber',    label: 'Fiber',    unit: 'g',    color: '#215CDA' },
 ];
 
 function MacroPill({ label, current, goal, color }) {
@@ -441,8 +441,8 @@ export default function LogScreen() {
           <View style={styles.macroPillRow}>
             <MacroPill label="Protein" current={totals.protein} goal={goals.protein}    color="#CE5400" />
             <MacroPill label="Carbs"   current={totals.carbs}   goal={goals.carbs}     color="#08C343" />
-            <MacroPill label="Fat"     current={totals.fat}     goal={goals.fat}       color="#215CDA" />
-            <MacroPill label="Fiber"   current={totals.fiber}   goal={goals.fiber??30} color="#A101C9" />
+            <MacroPill label="Fat"     current={totals.fat}     goal={goals.fat}       color="#FFD700" />
+            <MacroPill label="Fiber"   current={totals.fiber}   goal={goals.fiber??30} color="#215CDA" />
           </View>
         </View>
 
