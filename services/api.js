@@ -274,9 +274,27 @@ export async function smartDescribeFoods(text) {
   try {
     const { grams, food } = parseQuantityText(trimmed);
     if (food.length >= 3) {
-      const results = await searchWholeFoods(food);
-      if (results.length > 0) {
-        const best  = results[0];
+      // 1. Try Foundation/SR Legacy (most accurate macros for whole foods)
+      let best = null;
+      const wholeResults = await searchWholeFoods(food).catch(() => []);
+      if (wholeResults.length > 0) best = wholeResults[0];
+
+      // 2. If sugar missing (USDA search only returns ~25 nutrients — sugar often absent),
+      //    try branded foods which always declare sugar on label
+      if (!best || best.sugar === 0) {
+        try {
+          const branded = await searchUSDA(food, 'Branded Food', 5);
+          const brandedWithSugar = branded.find((f) => f.sugar > 0);
+          if (brandedWithSugar) {
+            // Use whole-food macros if we have them, but take sugar from branded
+            best = best
+              ? { ...best, sugar: brandedWithSugar.sugar }
+              : brandedWithSugar;
+          }
+        } catch {}
+      }
+
+      if (best) {
         const scale = grams / 100;
         return [{
           food_name: trimmed,
