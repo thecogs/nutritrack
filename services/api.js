@@ -182,6 +182,9 @@ export async function searchFood(q) {
 }
 
 // ── Claude vision — food photo ────────────────────────────────────────────────
+// Step 1: Claude identifies food name + portion grams (+ reads label if present)
+// Step 2: USDA lookup scaled to identified grams
+// Step 3: Fall back to Claude's own macro estimates if USDA has no match
 
 export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
   return withRetry(async () => {
@@ -192,11 +195,47 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
         role: 'user',
         content: [
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
-          { type: 'text',  text: 'You are a nutrition expert. Identify the food in this image and estimate macros for the exact portion shown. Lean toward USDA Foundation values for whole foods. Return ONLY valid JSON with no markdown:\n{"food_name":"specific name","calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"serving_size":"portion shown"}' },
+          { type: 'text',  text:
+            'You are a nutrition expert analyzing a food photo.\n' +
+            '1. Identify the food as specifically as possible (e.g. "grilled chicken breast" not just "chicken").\n' +
+            '2. Estimate the portion weight in grams using visual cues (plate, utensils, hand).\n' +
+            '3. If this is a nutrition facts label, set is_label:true and read the values directly from the label.\n' +
+            'Return ONLY valid JSON with no markdown:\n' +
+            '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number}',
+          },
         ],
       }],
     }, 20000);
-    return parseJSON(text);
+
+    const identified = parseJSON(text);
+
+    // Nutrition label photo → trust Claude's direct reading, it's accurate
+    if (identified.is_label) {
+      return { ...identified, source: 'label' };
+    }
+
+    // Try USDA with the identified food name, scaled to estimated portion
+    try {
+      const results = await searchWholeFoods(identified.food_name);
+      if (results.length > 0) {
+        const best  = results[0];
+        const grams = identified.grams || 100;
+        const scale = grams / 100;
+        return {
+          food_name:    identified.food_name,
+          calories:     Math.round(best.calories * scale),
+          protein:      Math.round(best.protein  * scale * 10) / 10,
+          carbs:        Math.round(best.carbs    * scale * 10) / 10,
+          fat:          Math.round(best.fat      * scale * 10) / 10,
+          fiber:        Math.round((best.fiber || 0) * scale * 10) / 10,
+          serving_size: `${Math.round(grams)}g`,
+          source:       'usda',
+        };
+      }
+    } catch {}
+
+    // Fall back to Claude's own macro estimates
+    return { ...identified, source: 'ai' };
   });
 }
 

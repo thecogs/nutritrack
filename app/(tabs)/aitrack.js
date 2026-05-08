@@ -207,6 +207,7 @@ function PhotoScanner({ onClose }) {
   const [photoUri,   setPhotoUri]       = useState(null);
   const [foodName,   setFoodName]       = useState('');
   const [mealType,   setMealType]       = useState(getDefaultMealType);
+  const [dataSource, setDataSource]     = useState(null); // 'usda' | 'label' | 'ai'
   const [cal,  setCal]   = useState('');
   const [prot, setProt]  = useState('');
   const [carb, setCarb]  = useState('');
@@ -215,7 +216,7 @@ function PhotoScanner({ onClose }) {
 
   const resetModal = () => {
     setPhotoUri(null); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber('');
-    setMealType(getDefaultMealType()); setAiLoading(false);
+    setMealType(getDefaultMealType()); setAiLoading(false); setDataSource(null);
   };
 
   const handleCapture = async () => {
@@ -229,6 +230,7 @@ function PhotoScanner({ onClose }) {
       const food = await scanFoodPhoto(asset.base64, 'image/jpeg');
       setFoodName(food.food_name||'');
       setCal(String(food.calories??'')); setProt(String(food.protein??'')); setCarb(String(food.carbs??'')); setFat(String(food.fat??'')); setFiber(String(food.fiber??''));
+      setDataSource(food.source || 'ai');
     } catch {} finally { setAiLoading(false); }
   };
 
@@ -257,8 +259,14 @@ function PhotoScanner({ onClose }) {
             {photoUri && <Image source={{ uri: photoUri }} style={s.preview} />}
             <TextInput style={s.foodNameInput} value={foodName} onChangeText={setFoodName} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
             {aiLoading
-              ? <View style={s.aiRow}><ActivityIndicator size="small" color={G} /><Text style={s.aiText}>Estimating with Claude AI…</Text></View>
-              : <Text style={s.aiNote}>{(cal||prot) ? 'AI estimate — tap any value to adjust' : 'Enter values below'}</Text>
+              ? <View style={s.aiRow}><ActivityIndicator size="small" color={G} /><Text style={s.aiText}>Identifying food…</Text></View>
+              : <Text style={s.aiNote}>
+                  {!cal && !prot
+                    ? 'Enter values below'
+                    : dataSource === 'usda'  ? '✓ USDA verified · tap any value to adjust'
+                    : dataSource === 'label' ? '✓ Read from nutrition label · tap to adjust'
+                    : 'AI estimate · tap any value to adjust'}
+                </Text>
             }
             <View style={s.macroGrid}>
               <MacroInput label="Calories" value={cal}   onChange={setCal}   color="#E05555" unit="kcal" />
