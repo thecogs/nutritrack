@@ -58,7 +58,7 @@ export async function addLog(food) {
     .insert({
       user_id: userId, food_name: food.food_name,
       calories: food.calories || 0, protein: food.protein || 0,
-      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0, sugar: food.sugar || 0,
+      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0, sugar: food.sugar || 0, sat_fat: food.sat_fat || 0,
       meal_type: food.meal_type || 'snack', photo_url: food.photo_url || null,
       timestamp: now, date: now.split('T')[0],
     })
@@ -74,7 +74,7 @@ export async function updateLog(id, food) {
     .update({
       food_name: food.food_name,
       calories: food.calories || 0, protein: food.protein || 0,
-      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0, sugar: food.sugar || 0,
+      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0, sugar: food.sugar || 0, sat_fat: food.sat_fat || 0,
       meal_type: food.meal_type || 'snack',
     })
     .eq('id', id).eq('user_id', userId);
@@ -97,7 +97,7 @@ export async function getGoals() {
     .from('user_goals').select('*')
     .eq('user_id', userId).single();
   if (error && error.code !== 'PGRST116') throw error;
-  return data || { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, height_in: 0, include_activity: true };
+  return data || { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, sat_fat: 20, height_in: 0, include_activity: true };
 }
 
 export async function saveGoals(goals) {
@@ -112,7 +112,8 @@ export async function saveGoals(goals) {
       carbs:    goals.carbs    ?? current.carbs    ?? 250,
       fat:      goals.fat      ?? current.fat      ?? 65,
       fiber:    goals.fiber    ?? current.fiber    ?? 30,
-      sugar:    goals.sugar    ?? current.sugar    ?? 50,
+      sugar:   goals.sugar   ?? current.sugar   ?? 50,
+      sat_fat: goals.sat_fat ?? current.sat_fat ?? 20,
       height_in:        goals.height_in        ?? current.height_in        ?? 0,
       include_activity: goals.include_activity ?? current.include_activity ?? true,
     });

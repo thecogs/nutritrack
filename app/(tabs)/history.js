@@ -139,9 +139,10 @@ export default function HistoryScreen() {
       carbs:    acc.carbs    + (item.carbs    || 0),
       fat:      acc.fat      + (item.fat      || 0),
       fiber:    acc.fiber    + (item.fiber    || 0),
-      sugar:    acc.sugar    + (item.sugar    || 0),
+      sugar:   acc.sugar   + (item.sugar   || 0),
+      sat_fat: acc.sat_fat + (item.sat_fat || 0),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0, sat_fat: 0 }
   );
 
   const grouped = MEAL_TYPES.reduce((acc, type) => {
@@ -186,11 +187,12 @@ export default function HistoryScreen() {
             </View>
             <View style={styles.macroRow}>
               {[
-                { label: 'Protein', value: totals.protein, goal: goals.protein,      color: '#CE5400' },
-                { label: 'Carbs',   value: totals.carbs,   goal: goals.carbs,        color: '#08C343' },
-                { label: 'Fat',     value: totals.fat,     goal: goals.fat,          color: '#FFD700' },
-                { label: 'Fiber',   value: totals.fiber,   goal: goals.fiber ?? 30,  color: '#215CDA' },
-                { label: 'Sugar',   value: totals.sugar,   goal: goals.sugar  ?? 50, color: '#FF6B9D' },
+                { label: 'Protein',    value: totals.protein,      goal: goals.protein,       color: '#CE5400' },
+                { label: 'Carbs',      value: totals.carbs,        goal: goals.carbs,         color: '#08C343' },
+                { label: 'Fat (Total)',value: totals.fat,          goal: goals.fat,           color: '#FFD700' },
+                { label: 'Fiber',      value: totals.fiber,        goal: goals.fiber  ?? 30,  color: '#215CDA' },
+                { label: 'Sugar',      value: totals.sugar,        goal: goals.sugar  ?? 50,  color: '#FF6B9D' },
+                { label: 'Sat. Fat',   value: totals.sat_fat || 0, goal: goals.sat_fat ?? 20, color: '#FF6347' },
               ].map(({ label, value, goal, color }) => (
                 <View key={label} style={styles.macroPill}>
                   <Text style={[styles.macroPillValue, { color }]}>{Math.round(value)}g</Text>
@@ -217,7 +219,7 @@ export default function HistoryScreen() {
               <View key={item.id} style={styles.logItem}>
                 <Text style={styles.logName}>{item.food_name}</Text>
                 <Text style={styles.logMacros}>
-                  {Math.round(item.calories)} kcal · P {item.protein}g · C {item.carbs}g · F {item.fat}g · Fiber {item.fiber ?? 0}g · Sugar {item.sugar ?? 0}g
+                  {Math.round(item.calories)} kcal · P {item.protein}g · C {item.carbs}g · Fat {item.fat}g · Fiber {item.fiber ?? 0}g · Sugar {item.sugar ?? 0}g · Sat.Fat {item.sat_fat ?? 0}g
                 </Text>
               </View>
             ))}

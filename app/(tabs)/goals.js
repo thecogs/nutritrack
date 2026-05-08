@@ -17,9 +17,10 @@ const GOAL_FIELDS = [
   { key: 'calories', label: 'Daily Calories',  unit: 'kcal', color: '#FF453A', placeholder: '2000' },
   { key: 'protein',  label: 'Protein',          unit: 'g',    color: '#CE5400', placeholder: '150'  },
   { key: 'carbs',    label: 'Carbohydrates',    unit: 'g',    color: '#08C343', placeholder: '250'  },
-  { key: 'fat',      label: 'Fat',              unit: 'g',    color: '#FFD700', placeholder: '65'   },
-  { key: 'fiber',    label: 'Fiber',            unit: 'g',    color: '#215CDA', placeholder: '30'   },
-  { key: 'sugar',    label: 'Sugar (daily max)', unit: 'g',   color: '#FF6B9D', placeholder: '50'   },
+  { key: 'fat',     label: 'Fat (Total)',      unit: 'g', color: '#FFD700', placeholder: '65' },
+  { key: 'fiber',   label: 'Fiber',            unit: 'g', color: '#215CDA', placeholder: '30' },
+  { key: 'sugar',   label: 'Sugar (daily max)', unit: 'g', color: '#FF6B9D', placeholder: '50' },
+  { key: 'sat_fat', label: 'Sat. Fat (daily max)', unit: 'g', color: '#FF6347', placeholder: '20' },
 ];
 
 const PRESETS = [
@@ -42,7 +43,7 @@ function bmiCategory(b) {
 }
 
 export default function GoalsScreen() {
-  const [goals, setGoals] = useState({ calories: '2000', protein: '150', carbs: '250', fat: '65', fiber: '30', sugar: '50' });
+  const [goals, setGoals] = useState({ calories: '2000', protein: '150', carbs: '250', fat: '65', fiber: '30', sugar: '50', sat_fat: '20' });
   const [heightIn, setHeightIn]             = useState('');
   const [includeActivity, setIncludeActivity] = useState(true);
   const [weightInput, setWeightInput]       = useState('');
@@ -66,8 +67,9 @@ export default function GoalsScreen() {
               protein:  String(data.protein),
               carbs:    String(data.carbs),
               fat:      String(data.fat),
-              fiber:    String(data.fiber ?? 30),
-              sugar:    String(data.sugar  ?? 50),
+              fiber:   String(data.fiber   ?? 30),
+              sugar:   String(data.sugar   ?? 50),
+              sat_fat: String(data.sat_fat ?? 20),
             });
             setHeightIn(data.height_in ? String(data.height_in) : '');
             setIncludeActivity(data.include_activity !== false && data.include_activity !== 0);
@@ -88,7 +90,8 @@ export default function GoalsScreen() {
       carbs:    parseFloat(goals.carbs)    || 250,
       fat:      parseFloat(goals.fat)      || 65,
       fiber:    parseFloat(goals.fiber)    || 30,
-      sugar:    parseFloat(goals.sugar)    || 50,
+      sugar:   parseFloat(goals.sugar)   || 50,
+      sat_fat: parseFloat(goals.sat_fat) || 20,
       height_in:        parseFloat(heightIn) || 0,
       include_activity: includeActivity,
     };

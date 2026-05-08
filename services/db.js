@@ -52,6 +52,8 @@ const dbPromise = SQLite.openDatabaseAsync('nutritrack.db').then(async (db) => {
     'ALTER TABLE user_goals ADD COLUMN include_activity INTEGER DEFAULT 1',
     'ALTER TABLE food_logs ADD COLUMN sugar REAL DEFAULT 0',
     'ALTER TABLE user_goals ADD COLUMN sugar REAL DEFAULT 50',
+    'ALTER TABLE food_logs ADD COLUMN sat_fat REAL DEFAULT 0',
+    'ALTER TABLE user_goals ADD COLUMN sat_fat REAL DEFAULT 20',
   ];
   for (const sql of migrations) {
     await db.execAsync(sql).catch(() => {});
@@ -102,8 +104,8 @@ export async function addLog(food) {
   const db = await getDb();
   const now = localISOString();
   const result = await db.runAsync(
-    'INSERT INTO food_logs (food_name, calories, protein, carbs, fat, fiber, sugar, meal_type, photo_url, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)',
-    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.meal_type||'snack', food.photo_url||null, now]
+    'INSERT INTO food_logs (food_name, calories, protein, carbs, fat, fiber, sugar, sat_fat, meal_type, photo_url, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, food.meal_type||'snack', food.photo_url||null, now]
   );
   return { id: result.lastInsertRowId };
 }
@@ -111,8 +113,8 @@ export async function addLog(food) {
 export async function updateLog(id, food) {
   const db = await getDb();
   await db.runAsync(
-    'UPDATE food_logs SET food_name=?, calories=?, protein=?, carbs=?, fat=?, fiber=?, sugar=?, meal_type=? WHERE id=?',
-    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.meal_type||'snack', id]
+    'UPDATE food_logs SET food_name=?, calories=?, protein=?, carbs=?, fat=?, fiber=?, sugar=?, sat_fat=?, meal_type=? WHERE id=?',
+    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, food.meal_type||'snack', id]
   );
 }
 
@@ -126,14 +128,14 @@ export async function deleteLog(id) {
 export async function getGoals() {
   const db = await getDb();
   return (await db.getFirstAsync('SELECT * FROM user_goals WHERE id = 1')) ||
-    { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, height_in: 0, include_activity: 1 };
+    { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, sat_fat: 20, height_in: 0, include_activity: 1 };
 }
 
 export async function saveGoals(goals) {
   const db = await getDb();
   await db.runAsync(
-    'INSERT OR REPLACE INTO user_goals (id, calories, protein, carbs, fat, fiber, sugar, height_in, include_activity) VALUES (1,?,?,?,?,?,?,?,?)',
-    [goals.calories??2000, goals.protein??150, goals.carbs??250, goals.fat??65, goals.fiber??30, goals.sugar??50, goals.height_in??0, goals.include_activity??1]
+    'INSERT OR REPLACE INTO user_goals (id, calories, protein, carbs, fat, fiber, sugar, sat_fat, height_in, include_activity) VALUES (1,?,?,?,?,?,?,?,?,?)',
+    [goals.calories??2000, goals.protein??150, goals.carbs??250, goals.fat??65, goals.fiber??30, goals.sugar??50, goals.sat_fat??20, goals.height_in??0, goals.include_activity??1]
   );
 }
 
