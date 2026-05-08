@@ -26,6 +26,7 @@ const MACRO_DEFS = [
   { key: 'carbs',    label: 'Carbs',    unit: 'g',    color: '#08C343' },
   { key: 'fat',      label: 'Fat',      unit: 'g',    color: '#FFD700' },
   { key: 'fiber',    label: 'Fiber',    unit: 'g',    color: '#215CDA' },
+  { key: 'sugar',    label: 'Sugar',    unit: 'g',    color: '#FF6B9D' },
 ];
 
 function MacroPill({ label, current, goal, color }) {
@@ -62,7 +63,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
   const [base, setBase]                 = useState(null);
   const [servingGrams, setServingGrams] = useState(100);
   const [aiItems, setAiItems]           = useState(null);
-  const [macros, setMacros] = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+  const [macros, setMacros] = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '' });
   const setMacro = (key) => (val) => setMacros((m) => ({ ...m, [key]: val }));
   const searchTimer = useRef(null);
   const pickedRef   = useRef(false);
@@ -77,6 +78,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
       carbs:    String(Math.round(base.carbs    * f * 10) / 10),
       fat:      String(Math.round(base.fat      * f * 10) / 10),
       fiber:    String(Math.round((base.fiber||0) * f * 10) / 10),
+      sugar:    String(Math.round((base.sugar ||0) * f * 10) / 10),
     });
   }, [base, servingGrams]);
 
@@ -100,7 +102,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
       if (foods.length === 1) {
         const food = foods[0];
         setText(food.food_name || text.trim()); setBase(null);
-        setMacros({ calories: String(food.calories??''), protein: String(food.protein??''), carbs: String(food.carbs??''), fat: String(food.fat??''), fiber: String(food.fiber??'') });
+        setMacros({ calories: String(food.calories??''), protein: String(food.protein??''), carbs: String(food.carbs??''), fat: String(food.fat??''), fiber: String(food.fiber??''), sugar: String(food.sugar??'') });
         setAiItems(null);
       } else { setAiItems(foods.map((f) => ({ ...f, excluded: false }))); }
     } catch { Alert.alert('AI estimate failed', 'Enter values manually below.'); }
@@ -109,28 +111,28 @@ function AddFoodModal({ visible, onClose, onSave }) {
 
   const pickResult = (item) => {
     pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setSearching(false); setAiItems(null);
-    const b = { calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0 };
+    const b = { calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0 };
     setBase(b); setServingGrams(100); setText(item.food_name);
-    setMacros({ calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs), fat: String(item.fat), fiber: String(item.fiber||0) });
+    setMacros({ calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs), fat: String(item.fat), fiber: String(item.fiber||0), sugar: String(item.sugar||0) });
   };
 
   const handleSave = async () => {
     const name = text.trim();
     if (!name) { Alert.alert('Name required', 'Enter a food name or description first.'); return; }
-    await onSave({ food_name: name, calories: parseFloat(macros.calories)||0, protein: parseFloat(macros.protein)||0, carbs: parseFloat(macros.carbs)||0, fat: parseFloat(macros.fat)||0, fiber: parseFloat(macros.fiber)||0, meal_type: mealType });
+    await onSave({ food_name: name, calories: parseFloat(macros.calories)||0, protein: parseFloat(macros.protein)||0, carbs: parseFloat(macros.carbs)||0, fat: parseFloat(macros.fat)||0, fiber: parseFloat(macros.fiber)||0, sugar: parseFloat(macros.sugar)||0, meal_type: mealType });
     reset(); onClose();
   };
 
   const handleSaveMany = async () => {
     const selected = (aiItems||[]).filter((i) => !i.excluded);
     if (!selected.length) return;
-    await onSave(selected.map((f) => ({ food_name: f.food_name, calories: f.calories||0, protein: f.protein||0, carbs: f.carbs||0, fat: f.fat||0, fiber: f.fiber||0, meal_type: mealType })));
+    await onSave(selected.map((f) => ({ food_name: f.food_name, calories: f.calories||0, protein: f.protein||0, carbs: f.carbs||0, fat: f.fat||0, fiber: f.fiber||0, sugar: f.sugar||0, meal_type: mealType })));
     reset(); onClose();
   };
 
   const reset = () => {
     setText(''); setResults([]); setAiItems(null);
-    setMacros({ calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+    setMacros({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '' });
     setMealType(getDefaultMealType()); setBase(null); setServingGrams(100); pickedRef.current = false;
   };
 
@@ -232,20 +234,20 @@ function AddFoodModal({ visible, onClose, onSave }) {
 function EditFoodModal({ visible, item, onClose, onSave }) {
   const [name,     setName]     = useState('');
   const [mealType, setMealType] = useState('snack');
-  const [macros, setMacros]     = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '' });
+  const [macros, setMacros]     = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '' });
   const setMacro = (key) => (val) => setMacros((m) => ({ ...m, [key]: val }));
 
   useEffect(() => {
     if (item) {
       setName(item.food_name || '');
       setMealType(item.meal_type || 'snack');
-      setMacros({ calories: String(item.calories||0), protein: String(item.protein||0), carbs: String(item.carbs||0), fat: String(item.fat||0), fiber: String(item.fiber||0) });
+      setMacros({ calories: String(item.calories||0), protein: String(item.protein||0), carbs: String(item.carbs||0), fat: String(item.fat||0), fiber: String(item.fiber||0), sugar: String(item.sugar||0) });
     }
   }, [item]);
 
   const handleSave = async () => {
     if (!name.trim()) { Alert.alert('Name required'); return; }
-    await onSave(item.id, { food_name: name.trim(), calories: parseFloat(macros.calories)||0, protein: parseFloat(macros.protein)||0, carbs: parseFloat(macros.carbs)||0, fat: parseFloat(macros.fat)||0, fiber: parseFloat(macros.fiber)||0, meal_type: mealType });
+    await onSave(item.id, { food_name: name.trim(), calories: parseFloat(macros.calories)||0, protein: parseFloat(macros.protein)||0, carbs: parseFloat(macros.carbs)||0, fat: parseFloat(macros.fat)||0, fiber: parseFloat(macros.fiber)||0, sugar: parseFloat(macros.sugar)||0, meal_type: mealType });
     onClose();
   };
 
@@ -352,8 +354,8 @@ export default function LogScreen() {
   useFocusEffect(useCallback(() => { load(); }, [load]));
 
   const totals = logs.reduce(
-    (acc, item) => ({ calories: acc.calories+(item.calories||0), protein: acc.protein+(item.protein||0), carbs: acc.carbs+(item.carbs||0), fat: acc.fat+(item.fat||0), fiber: acc.fiber+(item.fiber||0) }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    (acc, item) => ({ calories: acc.calories+(item.calories||0), protein: acc.protein+(item.protein||0), carbs: acc.carbs+(item.carbs||0), fat: acc.fat+(item.fat||0), fiber: acc.fiber+(item.fiber||0), sugar: acc.sugar+(item.sugar||0) }),
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
   );
 
   const activityBurned = activity.reduce((s, a) => s + (a.calories_burned||0), 0);
@@ -444,6 +446,7 @@ export default function LogScreen() {
             <MacroPill label="Carbs"   current={totals.carbs}   goal={goals.carbs}     color="#08C343" />
             <MacroPill label="Fat"     current={totals.fat}     goal={goals.fat}       color="#FFD700" />
             <MacroPill label="Fiber"   current={totals.fiber}   goal={goals.fiber??30} color="#215CDA" />
+            <MacroPill label="Sugar"   current={totals.sugar}   goal={goals.sugar??50} color="#FF6B9D" />
           </View>
         </View>
 

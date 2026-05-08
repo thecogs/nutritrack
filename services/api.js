@@ -61,6 +61,7 @@ function parseUsdaNutrients(foodNutrients) {
     carbs:    parseFloat((byId[1005] || byName['carbohydrate, by difference'] || byName['total carbohydrate'] || 0).toFixed(1)),
     fat:      parseFloat((byId[1004] || byName['total lipid (fat)'] || byName['total fat'] || 0).toFixed(1)),
     fiber:    parseFloat((byId[1079] || byName['fiber, total dietary'] || 0).toFixed(1)),
+    sugar:    parseFloat((byId[2000] || byId[1063] || byName['total sugars'] || byName['sugars, total including nlea'] || byName['sugars, total'] || 0).toFixed(1)),
   };
 }
 
@@ -76,6 +77,7 @@ function offToFood(p) {
     carbs:        parseFloat((n['carbohydrates_100g'] || 0).toFixed(1)),
     fat:          parseFloat((n['fat_100g']           || 0).toFixed(1)),
     fiber:        parseFloat((n['fiber_100g'] || n['fibers_100g'] || 0).toFixed(1)),
+    sugar:        parseFloat((n['sugars_100g'] || n['sugars-total_100g'] || 0).toFixed(1)),
     serving_size: p.serving_size || '100g',
   };
 }
@@ -152,6 +154,7 @@ async function searchOFF(q) {
         carbs:     parseFloat((n['carbohydrates_100g'] || 0).toFixed(1)),
         fat:       parseFloat((n['fat_100g']           || 0).toFixed(1)),
         fiber:     parseFloat((n['fiber_100g'] || n['fibers_100g'] || 0).toFixed(1)),
+        sugar:     parseFloat((n['sugars_100g'] || n['sugars-total_100g'] || 0).toFixed(1)),
         per100g: true,
       };
     });
@@ -201,7 +204,7 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
             '2. Estimate the portion weight in grams using visual cues (plate, utensils, hand).\n' +
             '3. If this is a nutrition facts label, set is_label:true and read the values directly from the label.\n' +
             'Return ONLY valid JSON with no markdown:\n' +
-            '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number}',
+            '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number}',
           },
         ],
       }],
@@ -228,8 +231,11 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
           carbs:        Math.round(best.carbs    * scale * 10) / 10,
           fat:          Math.round(best.fat      * scale * 10) / 10,
           fiber:        Math.round((best.fiber || 0) * scale * 10) / 10,
+          sugar:        Math.round((best.sugar  || 0) * scale * 10) / 10,
           serving_size: `${Math.round(grams)}g`,
+          grams:        Math.round(grams),
           source:       'usda',
+          _base:        best,   // per-100g values for re-scaling by portion chips
         };
       }
     } catch {}
@@ -279,6 +285,7 @@ export async function smartDescribeFoods(text) {
           carbs:     Math.round(best.carbs    * scale * 10) / 10,
           fat:       Math.round(best.fat      * scale * 10) / 10,
           fiber:     Math.round((best.fiber || 0) * scale * 10) / 10,
+          sugar:     Math.round((best.sugar  || 0) * scale * 10) / 10,
         }];
       }
     }
@@ -310,7 +317,7 @@ export async function describeFoods(text) {
           `- Whole foods → USDA Foundation values\n` +
           `- Include dietary fiber\n\n` +
           `Return ONLY a valid JSON array, no markdown:\n` +
-          `[{"food_name":"concise name with quantity","calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number}]`,
+          `[{"food_name":"concise name with quantity","calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number}]`,
       }],
     }, 20000);
 
@@ -338,8 +345,9 @@ export async function getAdvice(messages, userGoals, todayLog) {
       carbs:    acc.carbs    + (item.carbs    || 0),
       fat:      acc.fat      + (item.fat      || 0),
       fiber:    acc.fiber    + (item.fiber    || 0),
+      sugar:    acc.sugar    + (item.sugar    || 0),
     }),
-    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0 }
+    { calories: 0, protein: 0, carbs: 0, fat: 0, fiber: 0, sugar: 0 }
   );
 
   const system =
@@ -361,8 +369,8 @@ export async function getAdvice(messages, userGoals, todayLog) {
     `GOALS_UPDATE:{"calories":N,"protein":N,"carbs":N,"fat":N,"fiber":N}\n` +
     `Use whole numbers. Only include this when actually changing goals.\n\n` +
     `## User's live data\n` +
-    `Goals:     ${goals.calories} kcal | P ${goals.protein}g | C ${goals.carbs}g | F ${goals.fat}g | Fiber ${goals.fiber || 30}g\n` +
-    `Today:     ${Math.round(totals.calories)} kcal | P ${Math.round(totals.protein)}g | C ${Math.round(totals.carbs)}g | F ${Math.round(totals.fat)}g | Fiber ${Math.round(totals.fiber)}g\n` +
+    `Goals:     ${goals.calories} kcal | P ${goals.protein}g | C ${goals.carbs}g | F ${goals.fat}g | Fiber ${goals.fiber || 30}g | Sugar <${goals.sugar || 50}g\n` +
+    `Today:     ${Math.round(totals.calories)} kcal | P ${Math.round(totals.protein)}g | C ${Math.round(totals.carbs)}g | F ${Math.round(totals.fat)}g | Fiber ${Math.round(totals.fiber)}g | Sugar ${Math.round(totals.sugar)}g\n` +
     `Remaining: ${Math.round(goals.calories - totals.calories)} kcal | P ${Math.round(goals.protein - totals.protein)}g remaining\n` +
     `Meals today: ${log.length ? log.map((m) => `${m.food_name} (${Math.round(m.calories)} kcal)`).join(', ') : 'none yet'}`;
 

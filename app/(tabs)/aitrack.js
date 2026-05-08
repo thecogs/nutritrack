@@ -75,7 +75,7 @@ function BarcodeScanner({ onClose }) {
     setLoading(true); setModalVisible(true);
     try {
       const food = await lookupBarcode(data);
-      const b = { food_name: food.food_name, brand: food.brand, calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat, fiber: food.fiber||0 };
+      const b = { food_name: food.food_name, brand: food.brand, calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat, fiber: food.fiber||0, sugar: food.sugar||0 };
       setBase(b); setServingGrams(100); setCustomGrams('');
       setFoodData({ ...b, ...scaleMacros(b, 100) });
     } catch { setScanError(true); } finally { setLoading(false); }
@@ -156,7 +156,7 @@ function BarcodeScanner({ onClose }) {
                 <Text style={s.modalTitle}>{foodData?.food_name}</Text>
                 {foodData?.brand ? <Text style={s.modalBrand}>{foodData.brand}</Text> : null}
                 <View style={s.macroGrid}>
-                  {[['Calories','calories','kcal','#E05555'],['Protein','protein','g','#4B9CD3'],['Carbs','carbs','g','#D4A017'],['Fat','fat','g','#9B7FD4'],['Fiber','fiber','g','#3A8FC4']].map(([label,key,unit,color]) => (
+                  {[['Calories','calories','kcal','#E05555'],['Protein','protein','g','#CE5400'],['Carbs','carbs','g','#08C343'],['Fat','fat','g','#FFD700'],['Fiber','fiber','g','#215CDA'],['Sugar','sugar','g','#FF6B9D']].map(([label,key,unit,color]) => (
                     <View key={label} style={s.macroDisplayCell}>
                       <Text style={[s.macroDisplayVal, { color }]}>{foodData?.[key] ?? 0}{unit}</Text>
                       <Text style={s.macroDisplayLbl}>{label}</Text>
@@ -207,16 +207,31 @@ function PhotoScanner({ onClose }) {
   const [photoUri,   setPhotoUri]       = useState(null);
   const [foodName,   setFoodName]       = useState('');
   const [mealType,   setMealType]       = useState(getDefaultMealType);
-  const [dataSource, setDataSource]     = useState(null); // 'usda' | 'label' | 'ai'
-  const [cal,  setCal]   = useState('');
-  const [prot, setProt]  = useState('');
-  const [carb, setCarb]  = useState('');
-  const [fat,  setFat]   = useState('');
-  const [fiber,setFiber] = useState('');
+  const [dataSource,   setDataSource]   = useState(null); // 'usda' | 'label' | 'ai'
+  const [base,         setBase]         = useState(null); // per-100g values for re-scaling
+  const [servingGrams, setServingGrams] = useState(null);
+  const [cal,   setCal]   = useState('');
+  const [prot,  setProt]  = useState('');
+  const [carb,  setCarb]  = useState('');
+  const [fat,   setFat]   = useState('');
+  const [fiber, setFiber] = useState('');
+  const [sugar, setSugar] = useState('');
+
+  const applyServing = (grams) => {
+    if (!base) return;
+    const scale = grams / 100;
+    setServingGrams(grams);
+    setCal(String(Math.round(base.calories * scale)));
+    setProt(String(Math.round(base.protein  * scale * 10) / 10));
+    setCarb(String(Math.round(base.carbs    * scale * 10) / 10));
+    setFat(String(Math.round(base.fat       * scale * 10) / 10));
+    setFiber(String(Math.round((base.fiber  || 0) * scale * 10) / 10));
+    setSugar(String(Math.round((base.sugar  || 0) * scale * 10) / 10));
+  };
 
   const resetModal = () => {
-    setPhotoUri(null); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber('');
-    setMealType(getDefaultMealType()); setAiLoading(false); setDataSource(null);
+    setPhotoUri(null); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber(''); setSugar('');
+    setMealType(getDefaultMealType()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
   };
 
   const handleCapture = async () => {
@@ -229,15 +244,18 @@ function PhotoScanner({ onClose }) {
     try {
       const food = await scanFoodPhoto(asset.base64, 'image/jpeg');
       setFoodName(food.food_name||'');
-      setCal(String(food.calories??'')); setProt(String(food.protein??'')); setCarb(String(food.carbs??'')); setFat(String(food.fat??'')); setFiber(String(food.fiber??''));
+      setCal(String(food.calories??'')); setProt(String(food.protein??'')); setCarb(String(food.carbs??''));
+      setFat(String(food.fat??'')); setFiber(String(food.fiber??'')); setSugar(String(food.sugar??''));
       setDataSource(food.source || 'ai');
+      if (food._base) { setBase(food._base); setServingGrams(food.grams || 100); }
+      else { setBase(null); setServingGrams(null); }
     } catch {} finally { setAiLoading(false); }
   };
 
   const handleLog = async () => {
     const name = foodName.trim() || 'Unknown food';
     try {
-      await addLog({ food_name: name, calories: parseFloat(cal)||0, protein: parseFloat(prot)||0, carbs: parseFloat(carb)||0, fat: parseFloat(fat)||0, fiber: parseFloat(fiber)||0, meal_type: mealType, photo_url: photoUri });
+      await addLog({ food_name: name, calories: parseFloat(cal)||0, protein: parseFloat(prot)||0, carbs: parseFloat(carb)||0, fat: parseFloat(fat)||0, fiber: parseFloat(fiber)||0, sugar: parseFloat(sugar)||0, meal_type: mealType, photo_url: photoUri });
       setModalVisible(false); resetModal();
       Alert.alert('Logged!', `${name} added to ${mealType}.`);
       onClose();
@@ -268,12 +286,25 @@ function PhotoScanner({ onClose }) {
                     : 'AI estimate · tap any value to adjust'}
                 </Text>
             }
+            {base && (
+              <>
+                <Text style={s.sectionLabel}>Adjust portion size</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 12 }} contentContainerStyle={{ paddingRight: 16 }}>
+                  {OZ_PRESETS.map((p) => (
+                    <TouchableOpacity key={p.label} style={[s.ozChip, servingGrams===p.grams && s.ozChipActive]} onPress={() => applyServing(p.grams)}>
+                      <Text style={[s.ozChipText, servingGrams===p.grams && s.ozChipTextActive]}>{p.label}</Text>
+                    </TouchableOpacity>
+                  ))}
+                </ScrollView>
+              </>
+            )}
             <View style={s.macroGrid}>
               <MacroInput label="Calories" value={cal}   onChange={setCal}   color="#E05555" unit="kcal" />
-              <MacroInput label="Protein"  value={prot}  onChange={setProt}  color="#4B9CD3" unit="g" />
-              <MacroInput label="Carbs"    value={carb}  onChange={setCarb}  color="#D4A017" unit="g" />
-              <MacroInput label="Fat"      value={fat}   onChange={setFat}   color="#9B7FD4" unit="g" />
-              <MacroInput label="Fiber"    value={fiber} onChange={setFiber} color="#3A8FC4" unit="g" />
+              <MacroInput label="Protein"  value={prot}  onChange={setProt}  color="#CE5400" unit="g" />
+              <MacroInput label="Carbs"    value={carb}  onChange={setCarb}  color="#08C343" unit="g" />
+              <MacroInput label="Fat"      value={fat}   onChange={setFat}   color="#FFD700" unit="g" />
+              <MacroInput label="Fiber"    value={fiber} onChange={setFiber} color="#215CDA" unit="g" />
+              <MacroInput label="Sugar"    value={sugar} onChange={setSugar} color="#FF6B9D" unit="g" />
             </View>
             <View style={s.mealRow}>
               {MEAL_TYPES.map((type) => (
