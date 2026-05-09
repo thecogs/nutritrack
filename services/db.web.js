@@ -280,6 +280,20 @@ export async function removeFavorite(id) {
   if (error) throw error;
 }
 
+export async function updateFavorite(id, food) {
+  const userId = await getUserId();
+  const { error } = await supabase
+    .from('favorites')
+    .update({
+      food_name: food.food_name,
+      calories: food.calories || 0, protein: food.protein || 0,
+      carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0,
+      sugar: food.sugar || 0, sat_fat: food.sat_fat || 0,
+    })
+    .eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
 // ── Meal templates ────────────────────────────────────────────────────────────
 
 export async function getTemplates() {

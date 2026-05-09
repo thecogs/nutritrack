@@ -4,7 +4,7 @@ import {
   StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
+import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, updateFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
 import { smartDescribeFoods, searchFood } from '../../services/api';
 import { getDefaultMealType } from '../../services/mealTime';
 
@@ -53,6 +53,60 @@ function formatTime(ts) {
   return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// ── FavEditModal ──────────────────────────────────────────────────────────────
+
+function FavEditModal({ visible, favorite, onClose, onSave }) {
+  const [name,   setName]   = useState('');
+  const [macros, setMacros] = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '', sat_fat: '' });
+  const setMacro = (key) => (val) => setMacros((m) => ({ ...m, [key]: val }));
+
+  useEffect(() => {
+    if (!visible) return;
+    if (favorite) {
+      setName(favorite.food_name || '');
+      setMacros({ calories: String(favorite.calories||0), protein: String(favorite.protein||0), carbs: String(favorite.carbs||0), fat: String(favorite.fat||0), fiber: String(favorite.fiber||0), sugar: String(favorite.sugar||0), sat_fat: String(favorite.sat_fat||0) });
+    } else {
+      setName('');
+      setMacros({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '', sat_fat: '' });
+    }
+  }, [visible, favorite]);
+
+  const handleSave = async () => {
+    if (!name.trim()) { Alert.alert('Name required', 'Enter a name for this favorite.'); return; }
+    const food = { food_name: name.trim(), calories: parseFloat(macros.calories)||0, protein: parseFloat(macros.protein)||0, carbs: parseFloat(macros.carbs)||0, fat: parseFloat(macros.fat)||0, fiber: parseFloat(macros.fiber)||0, sugar: parseFloat(macros.sugar)||0, sat_fat: parseFloat(macros.sat_fat)||0 };
+    await onSave(food);
+    onClose();
+  };
+
+  return (
+    <Modal visible={visible} animationType="slide" transparent onRequestClose={onClose}>
+      <View style={styles.modalBg}>
+        <ScrollView style={styles.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle}>{favorite ? 'Edit Favorite' : 'New Favorite'}</Text>
+          <View style={styles.inputRow}>
+            <TextInput style={styles.mainInput} placeholder="e.g. Greek yogurt with berries & maple syrup" placeholderTextColor="#4A4D5E" value={name} onChangeText={setName} />
+          </View>
+          <View style={styles.macroGrid}>
+            {MACRO_DEFS.map(({ key, label, unit, color }) => (
+              <View key={key} style={styles.macroCell}>
+                <View style={[styles.macroCellBar, { backgroundColor: color }]} />
+                <TextInput style={styles.macroCellInput} value={macros[key]} onChangeText={setMacro(key)} keyboardType="decimal-pad" selectTextOnFocus placeholder="0" placeholderTextColor="#3A3D4A" />
+                <Text style={styles.macroCellUnit}>{unit}</Text>
+                <Text style={styles.macroCellLbl}>{label}</Text>
+              </View>
+            ))}
+          </View>
+          <View style={styles.modalActions}>
+            <TouchableOpacity style={styles.cancelBtn} onPress={onClose}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.logBtn} onPress={handleSave}><Text style={styles.logBtnText}>{favorite ? 'Save Changes' : 'Save Favorite'}</Text></TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    </Modal>
+  );
+}
+
 // ── AddFoodModal ──────────────────────────────────────────────────────────────
 
 function AddFoodModal({ visible, onClose, onSave }) {
@@ -66,6 +120,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
   const [aiItems, setAiItems]           = useState(null);
   const [macros, setMacros] = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '', sat_fat: '' });
   const [favorites, setFavorites]       = useState([]);
+  const [favEdit,   setFavEdit]         = useState(null); // null=closed, false=new, obj=editing
   const setMacro = (key) => (val) => setMacros((m) => ({ ...m, [key]: val }));
   const searchTimer = useRef(null);
   const pickedRef   = useRef(false);
@@ -153,22 +208,47 @@ function AddFoodModal({ visible, onClose, onSave }) {
         <ScrollView style={styles.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}>
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>Log Food</Text>
-          {favorites.length > 0 && !aiItems && (
+          {!aiItems && (
             <>
-              <Text style={styles.favHeader}>FAVORITES</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.favScroll} contentContainerStyle={{ paddingRight: 16 }}>
-                {favorites.map((fav) => (
-                  <TouchableOpacity key={fav.id} style={styles.favChip} onPress={() => pickResult(fav)}>
-                    <Text style={styles.favChipName} numberOfLines={1}>{fav.food_name}</Text>
-                    <Text style={styles.favChipCal}>{Math.round(fav.calories)} kcal</Text>
-                    <TouchableOpacity style={styles.favChipRemove} onPress={() => { removeFavorite(fav.id); setFavorites((f) => f.filter((x) => x.id !== fav.id)); }}>
-                      <Text style={styles.favChipRemoveText}>✕</Text>
+              <View style={styles.favHeaderRow}>
+                <Text style={styles.favHeader}>FAVORITES</Text>
+                <TouchableOpacity style={styles.favAddBtn} onPress={() => setFavEdit(false)}>
+                  <Text style={styles.favAddBtnText}>＋ New</Text>
+                </TouchableOpacity>
+              </View>
+              {favorites.length > 0 && (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.favScroll} contentContainerStyle={{ paddingRight: 16 }}>
+                  {favorites.map((fav) => (
+                    <TouchableOpacity key={fav.id} style={styles.favChip} onPress={() => pickResult(fav)}>
+                      <Text style={styles.favChipName} numberOfLines={2}>{fav.food_name}</Text>
+                      <Text style={styles.favChipCal}>{Math.round(fav.calories)} kcal</Text>
+                      <View style={styles.favChipActions}>
+                        <TouchableOpacity onPress={() => setFavEdit(fav)}>
+                          <Text style={styles.favChipEdit}>✎</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity onPress={() => { removeFavorite(fav.id); setFavorites((f) => f.filter((x) => x.id !== fav.id)); }}>
+                          <Text style={styles.favChipRemoveText}>✕</Text>
+                        </TouchableOpacity>
+                      </View>
                     </TouchableOpacity>
-                  </TouchableOpacity>
-                ))}
-              </ScrollView>
+                  ))}
+                </ScrollView>
+              )}
             </>
           )}
+          <FavEditModal
+            visible={favEdit !== null}
+            favorite={favEdit || null}
+            onClose={() => setFavEdit(null)}
+            onSave={async (food) => {
+              if (favEdit && favEdit.id) {
+                await updateFavorite(favEdit.id, food);
+              } else {
+                await addFavorite(food);
+              }
+              setFavorites(await getFavorites());
+            }}
+          />
           {aiItems ? (
             <>
               <Text style={styles.aiMealHeader}>{selectedItems.length} food{selectedItems.length!==1?'s':''} identified — tap ✕ to remove any</Text>
@@ -694,13 +774,17 @@ const styles = StyleSheet.create({
   aiItemToggle:       { marginLeft: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: SURF },
   aiItemToggleText:   { color: '#E05555', fontSize: 13, fontWeight: '700' },
   aiItemAddText:      { color: G },
-  favHeader:          { color: '#FFD700', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  favHeaderRow:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  favHeader:          { color: '#FFD700', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2 },
+  favAddBtn:          { backgroundColor: 'rgba(255,215,0,0.12)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8 },
+  favAddBtnText:      { color: '#FFD700', fontSize: 12, fontWeight: '700' },
   favScroll:          { marginBottom: 14 },
-  favChip:            { backgroundColor: BG, borderRadius: 14, padding: 12, marginRight: 10, minWidth: 110, maxWidth: 160, borderWidth: 1, borderColor: 'rgba(255,215,0,0.18)' },
-  favChipName:        { color: TEXT, fontSize: 13, fontWeight: '600', marginBottom: 3 },
-  favChipCal:         { color: '#FFD700', fontSize: 11, fontWeight: '700' },
-  favChipRemove:      { position: 'absolute', top: 6, right: 6 },
-  favChipRemoveText:  { color: '#4A4D5E', fontSize: 11, fontWeight: '700' },
+  favChip:            { backgroundColor: BG, borderRadius: 14, padding: 12, marginRight: 10, width: 140, borderWidth: 1, borderColor: 'rgba(255,215,0,0.18)' },
+  favChipName:        { color: TEXT, fontSize: 13, fontWeight: '600', marginBottom: 4, minHeight: 34 },
+  favChipCal:         { color: '#FFD700', fontSize: 11, fontWeight: '700', marginBottom: 6 },
+  favChipActions:     { flexDirection: 'row', gap: 10 },
+  favChipEdit:        { color: TEXT, fontSize: 13, fontWeight: '700' },
+  favChipRemoveText:  { color: '#4A4D5E', fontSize: 12, fontWeight: '700' },
   aiTotalRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: SURF, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16, marginTop: 4 },
   aiTotalLabel:       { color: TEXT, fontSize: 13, fontWeight: '700' },
   aiTotalMacros:      { color: '#8892A4', fontSize: 12 },

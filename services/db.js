@@ -261,6 +261,14 @@ export async function removeFavorite(id) {
   await db.runAsync('DELETE FROM favorites WHERE id = ?', [id]);
 }
 
+export async function updateFavorite(id, food) {
+  const db = await getDb();
+  await db.runAsync(
+    'UPDATE favorites SET food_name=?, calories=?, protein=?, carbs=?, fat=?, fiber=?, sugar=?, sat_fat=? WHERE id=?',
+    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, id]
+  );
+}
+
 // ── Meal templates ────────────────────────────────────────────────────────────
 
 export async function getTemplates() {
