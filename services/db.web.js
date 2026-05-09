@@ -242,6 +242,44 @@ export async function clearAdvisorHistory() {
   if (error) throw error;
 }
 
+// ── Favorites ─────────────────────────────────────────────────────────────────
+
+export async function getFavorites() {
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from('favorites').select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addFavorite(food) {
+  const userId = await getUserId();
+  const { error } = await supabase
+    .from('favorites')
+    .insert({
+      user_id: userId,
+      food_name: food.food_name,
+      calories: food.calories || 0,
+      protein: food.protein || 0,
+      carbs: food.carbs || 0,
+      fat: food.fat || 0,
+      fiber: food.fiber || 0,
+      sugar: food.sugar || 0,
+      sat_fat: food.sat_fat || 0,
+    });
+  if (error) throw error;
+}
+
+export async function removeFavorite(id) {
+  const userId = await getUserId();
+  const { error } = await supabase
+    .from('favorites').delete()
+    .eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
 // ── CSV import ────────────────────────────────────────────────────────────────
 
 export async function importFromCSV(csvText) {

@@ -42,6 +42,13 @@ const dbPromise = SQLite.openDatabaseAsync('nutritrack.db').then(async (db) => {
       content TEXT NOT NULL,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%SZ', 'now'))
     );
+    CREATE TABLE IF NOT EXISTS favorites (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      food_name TEXT NOT NULL,
+      calories REAL DEFAULT 0, protein REAL DEFAULT 0, carbs REAL DEFAULT 0,
+      fat REAL DEFAULT 0, fiber REAL DEFAULT 0, sugar REAL DEFAULT 0, sat_fat REAL DEFAULT 0,
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+    );
   `);
 
   // Migrations — each silently skips if column already exists
@@ -218,6 +225,26 @@ export async function appendAdvisorMessage(role, content) {
 export async function clearAdvisorHistory() {
   const db = await getDb();
   await db.runAsync('DELETE FROM advisor_messages');
+}
+
+// ── Favorites ─────────────────────────────────────────────────────────────────
+
+export async function getFavorites() {
+  const db = await getDb();
+  return db.getAllAsync('SELECT * FROM favorites ORDER BY created_at DESC');
+}
+
+export async function addFavorite(food) {
+  const db = await getDb();
+  await db.runAsync(
+    'INSERT OR IGNORE INTO favorites (food_name, calories, protein, carbs, fat, fiber, sugar, sat_fat) VALUES (?,?,?,?,?,?,?,?)',
+    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0]
+  );
+}
+
+export async function removeFavorite(id) {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM favorites WHERE id = ?', [id]);
 }
 
 // ── CSV import ────────────────────────────────────────────────────────────────

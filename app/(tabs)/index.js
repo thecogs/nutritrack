@@ -4,7 +4,7 @@ import {
   StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity } from '../../services/db';
+import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite } from '../../services/db';
 import { smartDescribeFoods, searchFood } from '../../services/api';
 import { getDefaultMealType } from '../../services/mealTime';
 
@@ -65,11 +65,17 @@ function AddFoodModal({ visible, onClose, onSave }) {
   const [servingGrams, setServingGrams] = useState(100);
   const [aiItems, setAiItems]           = useState(null);
   const [macros, setMacros] = useState({ calories: '', protein: '', carbs: '', fat: '', fiber: '', sugar: '', sat_fat: '' });
+  const [favorites, setFavorites]       = useState([]);
   const setMacro = (key) => (val) => setMacros((m) => ({ ...m, [key]: val }));
   const searchTimer = useRef(null);
   const pickedRef   = useRef(false);
 
-  useEffect(() => { if (visible) setMealType(getDefaultMealType()); }, [visible]);
+  useEffect(() => {
+    if (visible) {
+      setMealType(getDefaultMealType());
+      getFavorites().then(setFavorites).catch(() => {});
+    }
+  }, [visible]);
   useEffect(() => {
     if (!base) return;
     const f = servingGrams / 100;
@@ -147,6 +153,22 @@ function AddFoodModal({ visible, onClose, onSave }) {
         <ScrollView style={styles.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag" showsVerticalScrollIndicator={false}>
           <View style={styles.sheetHandle} />
           <Text style={styles.sheetTitle}>Log Food</Text>
+          {favorites.length > 0 && !aiItems && (
+            <>
+              <Text style={styles.favHeader}>FAVORITES</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.favScroll} contentContainerStyle={{ paddingRight: 16 }}>
+                {favorites.map((fav) => (
+                  <TouchableOpacity key={fav.id} style={styles.favChip} onPress={() => pickResult(fav)}>
+                    <Text style={styles.favChipName} numberOfLines={1}>{fav.food_name}</Text>
+                    <Text style={styles.favChipCal}>{Math.round(fav.calories)} kcal</Text>
+                    <TouchableOpacity style={styles.favChipRemove} onPress={() => { removeFavorite(fav.id); setFavorites((f) => f.filter((x) => x.id !== fav.id)); }}>
+                      <Text style={styles.favChipRemoveText}>✕</Text>
+                    </TouchableOpacity>
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </>
+          )}
           {aiItems ? (
             <>
               <Text style={styles.aiMealHeader}>{selectedItems.length} food{selectedItems.length!==1?'s':''} identified — tap ✕ to remove any</Text>
@@ -377,6 +399,13 @@ export default function LogScreen() {
 
   const handleEdit = (item) => setEditItem(item);
 
+  const handleFavorite = async (item) => {
+    try {
+      await addFavorite({ food_name: item.food_name, calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0, sat_fat: item.sat_fat||0 });
+      Alert.alert('★ Saved', `${item.food_name} added to favorites.`);
+    } catch { Alert.alert('Error', 'Could not save favorite.'); }
+  };
+
   const handleUpdate = async (id, data) => {
     try { await updateLog(id, data); setLogs((await getTodayLogs())||[]); }
     catch { Alert.alert('Error', 'Could not update entry.'); }
@@ -411,6 +440,9 @@ export default function LogScreen() {
           <Text style={styles.logName}>{item.food_name}</Text>
           <Text style={styles.logMacros}>{Math.round(item.calories)} kcal · P {item.protein}g · C {item.carbs}g · F {item.fat}g · Fiber {item.fiber??0}g</Text>
         </View>
+        <TouchableOpacity onPress={() => handleFavorite(item)} style={[styles.actionBtn, { marginRight: 6 }]}>
+          <Text style={styles.starBtnText}>★</Text>
+        </TouchableOpacity>
         <TouchableOpacity onPress={() => handleEdit(item)} style={[styles.actionBtn, { marginRight: 6 }]}>
           <Text style={styles.editBtnText}>✎</Text>
         </TouchableOpacity>
@@ -563,6 +595,7 @@ const styles = StyleSheet.create({
   actionBtn:    { width: 28, height: 28, borderRadius: 14, backgroundColor: SURF, alignItems: 'center', justifyContent: 'center' },
   editBtnText:  { color: TEXT, fontSize: 14, fontWeight: '700' },
   deleteBtnText:{ color: '#E05555', fontSize: 12, fontWeight: '700' },
+  starBtnText:  { color: '#FFD700', fontSize: 14, fontWeight: '700' },
   emptyText:    { color: '#2E3040', textAlign: 'center', marginTop: 48, fontSize: 15, lineHeight: 24 },
 
   viewToggle:           { flexDirection: 'row', backgroundColor: CARD, borderRadius: 12, padding: 4, marginBottom: 16, gap: 4 },
@@ -624,6 +657,13 @@ const styles = StyleSheet.create({
   aiItemToggle:       { marginLeft: 12, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 8, backgroundColor: SURF },
   aiItemToggleText:   { color: '#E05555', fontSize: 13, fontWeight: '700' },
   aiItemAddText:      { color: G },
+  favHeader:          { color: '#FFD700', fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 8 },
+  favScroll:          { marginBottom: 14 },
+  favChip:            { backgroundColor: BG, borderRadius: 14, padding: 12, marginRight: 10, minWidth: 110, maxWidth: 160, borderWidth: 1, borderColor: 'rgba(255,215,0,0.18)' },
+  favChipName:        { color: TEXT, fontSize: 13, fontWeight: '600', marginBottom: 3 },
+  favChipCal:         { color: '#FFD700', fontSize: 11, fontWeight: '700' },
+  favChipRemove:      { position: 'absolute', top: 6, right: 6 },
+  favChipRemoveText:  { color: '#4A4D5E', fontSize: 11, fontWeight: '700' },
   aiTotalRow:         { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: SURF, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 16, marginTop: 4 },
   aiTotalLabel:       { color: TEXT, fontSize: 13, fontWeight: '700' },
   aiTotalMacros:      { color: '#8892A4', fontSize: 12 },
