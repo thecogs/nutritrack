@@ -361,6 +361,7 @@ export default function LogScreen() {
   const [logs,          setLogs]          = useState([]);
   const [activity,      setActivity]      = useState([]);
   const [goals,         setGoals]         = useState({ calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, include_activity: true });
+  const [favs,          setFavs]          = useState([]);
   const [addVisible,    setAddVisible]    = useState(false);
   const [actVisible,    setActVisible]    = useState(false);
   const [editItem,      setEditItem]      = useState(null);
@@ -369,10 +370,11 @@ export default function LogScreen() {
 
   const load = useCallback(async () => {
     try {
-      const [l, g, a] = await Promise.all([getTodayLogs(), getGoals(), getTodayActivity()]);
+      const [l, g, a, f] = await Promise.all([getTodayLogs(), getGoals(), getTodayActivity(), getFavorites()]);
       setLogs(l || []);
       if (g) setGoals(g);
       setActivity(a || []);
+      setFavs(f || []);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -428,9 +430,16 @@ export default function LogScreen() {
 
   const handleFavorite = async (item) => {
     try {
-      await addFavorite({ food_name: item.food_name, calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0, sat_fat: item.sat_fat||0 });
-      Alert.alert('★ Saved', `${item.food_name} added to favorites.`);
-    } catch { Alert.alert('Error', 'Could not save favorite.'); }
+      const existing = favs.find((f) => f.food_name === item.food_name);
+      if (existing) {
+        await removeFavorite(existing.id);
+        setFavs((f) => f.filter((x) => x.id !== existing.id));
+      } else {
+        await addFavorite({ food_name: item.food_name, calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0, sat_fat: item.sat_fat||0 });
+        const updated = await getFavorites();
+        setFavs(updated);
+      }
+    } catch { Alert.alert('Error', 'Could not update favorites.'); }
   };
 
   const handleUpdate = async (id, data) => {
@@ -461,6 +470,7 @@ export default function LogScreen() {
   const grouped = MEAL_TYPES.reduce((acc, type) => { acc[type] = logs.filter((l) => l.meal_type===type); return acc; }, {});
 
   function FoodRow({ item }) {
+    const isFav = favs.some((f) => f.food_name === item.food_name);
     return (
       <View style={styles.logItem}>
         <View style={styles.logInfo}>
@@ -468,7 +478,7 @@ export default function LogScreen() {
           <Text style={styles.logMacros}>{Math.round(item.calories)} kcal · P {item.protein}g · C {item.carbs}g · F {item.fat}g · Fiber {item.fiber??0}g</Text>
         </View>
         <TouchableOpacity onPress={() => handleFavorite(item)} style={[styles.actionBtn, { marginRight: 6 }]}>
-          <Text style={styles.starBtnText}>★</Text>
+          <Text style={[styles.starBtnText, !isFav && { color: '#3A3D4A' }]}>{isFav ? '★' : '☆'}</Text>
         </TouchableOpacity>
         <TouchableOpacity onPress={() => handleEdit(item)} style={[styles.actionBtn, { marginRight: 6 }]}>
           <Text style={styles.editBtnText}>✎</Text>
