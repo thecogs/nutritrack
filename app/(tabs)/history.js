@@ -1,7 +1,8 @@
-import React, { useState, useCallback } from 'react';
-import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform } from 'react-native';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV } from '../../services/db';
+import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV, getTemplates, createTemplate, deleteTemplate, getTemplateItems, addTemplateItem, applyTemplate } from '../../services/db';
+import { searchFood } from '../../services/api';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -105,6 +106,225 @@ async function exportCSV() {
   } catch (err) {
     if (err?.name !== 'AbortError') Alert.alert('Export failed', 'Could not export data.');
   }
+}
+
+// ── TemplatesSection ──────────────────────────────────────────────────────────
+
+function TemplatesSection() {
+  const [templates,     setTemplates]     = useState([]);
+  const [items,         setItems]         = useState({});
+  const [expanded,      setExpanded]      = useState(null);
+  const [createVisible, setCreateVisible] = useState(false);
+  const [applyTarget,   setApplyTarget]   = useState(null);
+  const [tmplName,      setTmplName]      = useState('');
+  const [schedTime,     setSchedTime]     = useState('');
+  const [newItems,      setNewItems]      = useState([]);
+  const [searchText,    setSearchText]    = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching,     setSearching]     = useState(false);
+  const [mealType,      setMealType]      = useState('breakfast');
+  const searchTimer = useRef(null);
+
+  useEffect(() => { loadTemplates(); }, []);
+
+  async function loadTemplates() {
+    try { setTemplates(await getTemplates()); } catch {}
+  }
+
+  async function loadItems(id) {
+    try { const data = await getTemplateItems(id); setItems((p) => ({ ...p, [id]: data })); } catch {}
+  }
+
+  function toggleExpand(id) {
+    if (expanded === id) { setExpanded(null); return; }
+    setExpanded(id);
+    loadItems(id);
+  }
+
+  function handleSearch(t) {
+    setSearchText(t);
+    clearTimeout(searchTimer.current);
+    if (t.trim().length < 2) { setSearchResults([]); return; }
+    setSearching(true);
+    searchTimer.current = setTimeout(async () => {
+      try { setSearchResults((await searchFood(t.trim())) || []); }
+      catch { setSearchResults([]); } finally { setSearching(false); }
+    }, 400);
+  }
+
+  function pickResult(item) {
+    setNewItems((p) => [...p, { food_name: item.food_name, calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0, sat_fat: item.sat_fat||0, meal_type: 'snack' }]);
+    setSearchText(''); setSearchResults([]);
+  }
+
+  async function handleCreate() {
+    if (!tmplName.trim()) { Alert.alert('Name required'); return; }
+    if (newItems.length === 0) { Alert.alert('Add at least one food'); return; }
+    try {
+      const id = await createTemplate(tmplName.trim(), schedTime.trim() || null);
+      for (const item of newItems) await addTemplateItem(id, item);
+      await loadTemplates();
+      setCreateVisible(false);
+      setTmplName(''); setSchedTime(''); setNewItems([]); setSearchText(''); setSearchResults([]);
+    } catch { Alert.alert('Error', 'Could not save template.'); }
+  }
+
+  async function handleDelete(id) {
+    const doDelete = async () => {
+      await deleteTemplate(id);
+      setTemplates((t) => t.filter((x) => x.id !== id));
+      setItems((p) => { const n = { ...p }; delete n[id]; return n; });
+      if (expanded === id) setExpanded(null);
+    };
+    if (Platform.OS === 'web') { await doDelete(); return; }
+    Alert.alert('Delete template?', '', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete', style: 'destructive', onPress: doDelete },
+    ]);
+  }
+
+  async function handleApply() {
+    if (!applyTarget) return;
+    try {
+      const count = await applyTemplate(applyTarget.id, mealType);
+      Alert.alert('Logged!', `${count} item${count!==1?'s':''} from "${applyTarget.name}" logged as ${mealType}.`);
+      setApplyTarget(null);
+    } catch { Alert.alert('Error', 'Could not log template.'); }
+  }
+
+  function fmtTime(t) {
+    if (!t) return '';
+    const [h, m] = t.split(':').map(Number);
+    return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+  }
+
+  const MEAL_TYPES = ['breakfast', 'lunch', 'dinner', 'snack'];
+
+  return (
+    <View>
+      <View style={ts.sectionHeader}>
+        <Text style={ts.sectionLabel}>MEAL TEMPLATES</Text>
+        <TouchableOpacity style={ts.newBtn} onPress={() => setCreateVisible(true)}>
+          <Text style={ts.newBtnText}>+ New</Text>
+        </TouchableOpacity>
+      </View>
+
+      {templates.length === 0 && (
+        <Text style={ts.empty}>No templates yet. Save a meal combo to log it in one tap.</Text>
+      )}
+
+      {templates.map((tmpl) => {
+        const tmplItems = items[tmpl.id] || [];
+        const isExpanded = expanded === tmpl.id;
+        const totalCal = tmplItems.reduce((s, i) => s + (i.calories || 0), 0);
+        return (
+          <View key={tmpl.id} style={ts.card}>
+            <TouchableOpacity style={ts.cardTop} onPress={() => toggleExpand(tmpl.id)} activeOpacity={0.75}>
+              <View style={{ flex: 1 }}>
+                <Text style={ts.cardName}>{tmpl.name}</Text>
+                <Text style={ts.cardMeta}>
+                  {tmpl.schedule_time ? `${fmtTime(tmpl.schedule_time)}  ·  ` : ''}
+                  {isExpanded && tmplItems.length > 0
+                    ? `${tmplItems.length} item${tmplItems.length!==1?'s':''} · ${Math.round(totalCal)} kcal`
+                    : 'tap to expand'}
+                </Text>
+              </View>
+              <TouchableOpacity style={ts.logBtn} onPress={() => { setApplyTarget(tmpl); setMealType('breakfast'); }}>
+                <Text style={ts.logBtnText}>Log</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={ts.delBtn} onPress={() => handleDelete(tmpl.id)}>
+                <Text style={ts.delBtnText}>✕</Text>
+              </TouchableOpacity>
+            </TouchableOpacity>
+            {isExpanded && (
+              <View style={ts.itemList}>
+                {tmplItems.map((item) => (
+                  <View key={item.id} style={ts.itemRow}>
+                    <Text style={ts.itemName} numberOfLines={1}>{item.food_name}</Text>
+                    <Text style={ts.itemCal}>{Math.round(item.calories)} kcal</Text>
+                  </View>
+                ))}
+                {tmplItems.length === 0 && <Text style={ts.empty}>No items loaded.</Text>}
+              </View>
+            )}
+          </View>
+        );
+      })}
+
+      {/* ── Create Template Modal ── */}
+      <Modal visible={createVisible} animationType="slide" transparent onRequestClose={() => setCreateVisible(false)}>
+        <View style={ts.modalBg}>
+          <ScrollView style={ts.modal} contentContainerStyle={{ paddingBottom: 40 }} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
+            <View style={ts.handle} />
+            <Text style={ts.modalTitle}>New Template</Text>
+
+            <TextInput style={ts.input} value={tmplName} onChangeText={setTmplName} placeholder="Name (e.g. Gym Morning)" placeholderTextColor="#4A4D5E" />
+            <View style={ts.timeRow}>
+              <Text style={ts.timeLabel}>Schedule time (optional)</Text>
+              <TextInput style={ts.timeInput} value={schedTime} onChangeText={setSchedTime} placeholder="07:30" placeholderTextColor="#4A4D5E" keyboardType="numbers-and-punctuation" />
+            </View>
+            <Text style={ts.subLabel}>Add Foods</Text>
+
+            {newItems.map((item, idx) => (
+              <View key={idx} style={ts.newItemRow}>
+                <Text style={ts.newItemName} numberOfLines={1}>{item.food_name}</Text>
+                <Text style={ts.newItemCal}>{Math.round(item.calories)} kcal</Text>
+                <TouchableOpacity onPress={() => setNewItems((p) => p.filter((_, i) => i !== idx))}>
+                  <Text style={ts.delBtnText}>✕</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+
+            <View style={ts.searchRow}>
+              <TextInput style={ts.searchInput} value={searchText} onChangeText={handleSearch} placeholder="Search food to add…" placeholderTextColor="#4A4D5E" autoCorrect={false} />
+              {searching && <ActivityIndicator size="small" color="#4A4D5E" style={{ marginLeft: 8 }} />}
+            </View>
+            {searchResults.slice(0, 6).map((r, i) => (
+              <TouchableOpacity key={i} style={ts.searchResult} onPress={() => pickResult(r)}>
+                <Text style={ts.searchResultName} numberOfLines={1}>{r.food_name}</Text>
+                <Text style={ts.searchResultCal}>{r.calories} kcal · P {r.protein}g · C {r.carbs}g</Text>
+              </TouchableOpacity>
+            ))}
+
+            <View style={[ts.modalActions, { marginTop: 20 }]}>
+              <TouchableOpacity style={ts.cancelBtn} onPress={() => { setCreateVisible(false); setTmplName(''); setSchedTime(''); setNewItems([]); setSearchText(''); setSearchResults([]); }}>
+                <Text style={ts.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={ts.saveBtn} onPress={handleCreate}>
+                <Text style={ts.saveBtnText}>Save Template</Text>
+              </TouchableOpacity>
+            </View>
+          </ScrollView>
+        </View>
+      </Modal>
+
+      {/* ── Apply Template Modal ── */}
+      <Modal visible={!!applyTarget} animationType="slide" transparent onRequestClose={() => setApplyTarget(null)}>
+        <View style={ts.modalBg}>
+          <View style={[ts.modal, { paddingBottom: 40 }]}>
+            <View style={ts.handle} />
+            <Text style={ts.modalTitle}>Log "{applyTarget?.name}"</Text>
+            <Text style={ts.timeLabel}>Log as meal type:</Text>
+            <View style={ts.mealRow}>
+              {MEAL_TYPES.map((t) => (
+                <TouchableOpacity key={t} style={[ts.mealBtn, mealType === t && ts.mealBtnActive]} onPress={() => setMealType(t)}>
+                  <Text style={[ts.mealBtnText, mealType === t && ts.mealBtnTextActive]}>{t[0].toUpperCase() + t.slice(1)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <View style={ts.modalActions}>
+              <TouchableOpacity style={ts.cancelBtn} onPress={() => setApplyTarget(null)}>
+                <Text style={ts.cancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={ts.saveBtn} onPress={handleApply}>
+                <Text style={ts.saveBtnText}>Log Now</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    </View>
+  );
 }
 
 export default function HistoryScreen() {
@@ -227,6 +447,21 @@ export default function HistoryScreen() {
         );
       })}
 
+      {/* Templates */}
+      <View style={styles.divider} />
+      <TemplatesSection />
+
+      {/* Export / Import */}
+      <View style={styles.divider} />
+      <View style={styles.dataRow}>
+        <TouchableOpacity style={styles.exportBtn} onPress={exportCSV}>
+          <Text style={styles.exportBtnText}>⬆  Export CSV</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.exportBtn} onPress={importCSV}>
+          <Text style={styles.exportBtnText}>⬇  Import CSV</Text>
+        </TouchableOpacity>
+      </View>
+
     </ScrollView>
   );
 }
@@ -265,10 +500,68 @@ const styles = StyleSheet.create({
   logName:   { color: TEXT, fontSize: 14, fontWeight: '600' },
   logMacros: { color: '#606080', fontSize: 12, marginTop: 3 },
 
+  divider: { height: 1, backgroundColor: SURF, marginVertical: 24 },
+  dataRow:  { flexDirection: 'row', gap: 10, marginBottom: 8 },
   exportBtn: {
-    marginTop: 8, paddingVertical: 14, borderRadius: 14,
+    flex: 1, paddingVertical: 14, borderRadius: 14,
     backgroundColor: CARD, borderWidth: 1, borderColor: 'rgba(71,25,20,0.5)',
     alignItems: 'center',
   },
   exportBtnText: { color: TEXT, fontSize: 14, fontWeight: '600', letterSpacing: 0.3 },
+});
+
+// ── Template styles ───────────────────────────────────────────────────────────
+const ts = StyleSheet.create({
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  sectionLabel:  { color: G, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2 },
+  newBtn:        { backgroundColor: G, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
+  newBtnText:    { color: '#fff', fontSize: 13, fontWeight: '700' },
+  empty:         { color: '#3A3A5A', fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+
+  card:    { backgroundColor: CARD, borderRadius: 16, marginBottom: 10, overflow: 'hidden' },
+  cardTop: { flexDirection: 'row', alignItems: 'center', padding: 14 },
+  cardName:{ color: TEXT, fontSize: 15, fontWeight: '700' },
+  cardMeta:{ color: '#5A5248', fontSize: 12, marginTop: 2 },
+  logBtn:  { backgroundColor: G, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, marginLeft: 10 },
+  logBtnText: { color: '#fff', fontSize: 13, fontWeight: '700' },
+  delBtn:     { width: 28, height: 28, borderRadius: 14, backgroundColor: SURF, alignItems: 'center', justifyContent: 'center', marginLeft: 8 },
+  delBtnText: { color: '#E05555', fontSize: 12, fontWeight: '700' },
+
+  itemList: { borderTopWidth: 1, borderTopColor: SURF, paddingHorizontal: 14, paddingVertical: 10 },
+  itemRow:  { flexDirection: 'row', alignItems: 'center', paddingVertical: 6 },
+  itemName: { flex: 1, color: TEXT, fontSize: 13 },
+  itemCal:  { color: '#5A5248', fontSize: 12 },
+
+  modalBg:    { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'flex-end' },
+  modal:      { backgroundColor: CARD, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 20, maxHeight: '90%' },
+  handle:     { width: 36, height: 4, backgroundColor: SURF, borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
+  modalTitle: { color: TEXT, fontSize: 20, fontWeight: '700', marginBottom: 16 },
+
+  input:      { backgroundColor: BG, color: TEXT, fontSize: 16, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 13, marginBottom: 12 },
+  timeRow:    { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
+  timeLabel:  { flex: 1, color: '#5A5248', fontSize: 13 },
+  timeInput:  { backgroundColor: BG, color: TEXT, fontSize: 15, fontWeight: '700', borderRadius: 10, paddingHorizontal: 12, paddingVertical: 8, minWidth: 80, textAlign: 'center' },
+  subLabel:   { color: G, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
+
+  newItemRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10, marginBottom: 6 },
+  newItemName:{ flex: 1, color: TEXT, fontSize: 14 },
+  newItemCal: { color: '#5A5248', fontSize: 12, marginRight: 12 },
+
+  searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 12, paddingHorizontal: 14, marginBottom: 6 },
+  searchInput:      { flex: 1, color: TEXT, fontSize: 15, paddingVertical: 12 },
+  searchResult:     { backgroundColor: BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: SURF },
+  searchResultName: { color: TEXT, fontSize: 14, fontWeight: '600' },
+  searchResultCal:  { color: '#5A5248', fontSize: 12, marginTop: 2 },
+
+  mealRow:           { flexDirection: 'row', gap: 8, marginTop: 12, marginBottom: 16 },
+  mealBtn:           { flex: 1, paddingVertical: 10, borderRadius: 10, backgroundColor: SURF, alignItems: 'center' },
+  mealBtnActive:     { backgroundColor: G },
+  mealBtnText:       { color: '#5A5248', fontSize: 12 },
+  mealBtnTextActive: { color: '#fff', fontWeight: '700' },
+
+  modalActions: { flexDirection: 'row', gap: 12 },
+  cancelBtn:    { flex: 1, paddingVertical: 14, borderRadius: 14, backgroundColor: SURF, alignItems: 'center' },
+  cancelText:   { color: '#8892A4', fontWeight: '600' },
+  saveBtn:      { flex: 2, paddingVertical: 14, borderRadius: 14, backgroundColor: G, alignItems: 'center' },
+  saveBtnText:  { color: '#fff', fontWeight: '700', fontSize: 16 },
 });

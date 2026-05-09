@@ -49,6 +49,20 @@ const dbPromise = SQLite.openDatabaseAsync('nutritrack.db').then(async (db) => {
       fat REAL DEFAULT 0, fiber REAL DEFAULT 0, sugar REAL DEFAULT 0, sat_fat REAL DEFAULT 0,
       created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
     );
+    CREATE TABLE IF NOT EXISTS meal_templates (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      schedule_time TEXT,
+      created_at TEXT DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now', 'localtime'))
+    );
+    CREATE TABLE IF NOT EXISTS meal_template_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      template_id INTEGER NOT NULL,
+      food_name TEXT NOT NULL,
+      calories REAL DEFAULT 0, protein REAL DEFAULT 0, carbs REAL DEFAULT 0,
+      fat REAL DEFAULT 0, fiber REAL DEFAULT 0, sugar REAL DEFAULT 0, sat_fat REAL DEFAULT 0,
+      meal_type TEXT DEFAULT 'snack'
+    );
   `);
 
   // Migrations — each silently skips if column already exists
@@ -245,6 +259,64 @@ export async function addFavorite(food) {
 export async function removeFavorite(id) {
   const db = await getDb();
   await db.runAsync('DELETE FROM favorites WHERE id = ?', [id]);
+}
+
+// ── Meal templates ────────────────────────────────────────────────────────────
+
+export async function getTemplates() {
+  const db = await getDb();
+  return db.getAllAsync('SELECT * FROM meal_templates ORDER BY name ASC');
+}
+
+export async function createTemplate(name, scheduleTime = null) {
+  const db = await getDb();
+  const result = await db.runAsync(
+    'INSERT INTO meal_templates (name, schedule_time) VALUES (?,?)',
+    [name, scheduleTime]
+  );
+  return result.lastInsertRowId;
+}
+
+export async function deleteTemplate(id) {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM meal_template_items WHERE template_id=?', [id]);
+  await db.runAsync('DELETE FROM meal_templates WHERE id=?', [id]);
+}
+
+export async function getTemplateItems(templateId) {
+  const db = await getDb();
+  return db.getAllAsync('SELECT * FROM meal_template_items WHERE template_id=? ORDER BY id ASC', [templateId]);
+}
+
+export async function addTemplateItem(templateId, food) {
+  const db = await getDb();
+  await db.runAsync(
+    'INSERT INTO meal_template_items (template_id, food_name, calories, protein, carbs, fat, fiber, sugar, sat_fat, meal_type) VALUES (?,?,?,?,?,?,?,?,?,?)',
+    [templateId, food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, food.meal_type||'snack']
+  );
+}
+
+export async function removeTemplateItem(id) {
+  const db = await getDb();
+  await db.runAsync('DELETE FROM meal_template_items WHERE id=?', [id]);
+}
+
+export async function applyTemplate(templateId, mealType) {
+  const db = await getDb();
+  const items = await getTemplateItems(templateId);
+  const now = localISOString();
+  for (const item of items) {
+    await db.runAsync(
+      'INSERT INTO food_logs (food_name, calories, protein, carbs, fat, fiber, sugar, sat_fat, meal_type, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?)',
+      [item.food_name, item.calories, item.protein, item.carbs, item.fat, item.fiber||0, item.sugar||0, item.sat_fat||0, mealType||item.meal_type||'snack', now]
+    );
+  }
+  return items.length;
+}
+
+export async function getScheduledTemplates() {
+  const db = await getDb();
+  return db.getAllAsync('SELECT * FROM meal_templates WHERE schedule_time IS NOT NULL ORDER BY schedule_time ASC');
 }
 
 // ── CSV import ────────────────────────────────────────────────────────────────

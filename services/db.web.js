@@ -280,6 +280,93 @@ export async function removeFavorite(id) {
   if (error) throw error;
 }
 
+// ── Meal templates ────────────────────────────────────────────────────────────
+
+export async function getTemplates() {
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from('meal_templates').select('*')
+    .eq('user_id', userId)
+    .order('name', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function createTemplate(name, scheduleTime = null) {
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from('meal_templates')
+    .insert({ user_id: userId, name, schedule_time: scheduleTime })
+    .select('id').single();
+  if (error) throw error;
+  return data.id;
+}
+
+export async function deleteTemplate(id) {
+  const userId = await getUserId();
+  await supabase.from('meal_template_items').delete().eq('template_id', id);
+  const { error } = await supabase.from('meal_templates').delete()
+    .eq('id', id).eq('user_id', userId);
+  if (error) throw error;
+}
+
+export async function getTemplateItems(templateId) {
+  const { data, error } = await supabase
+    .from('meal_template_items').select('*')
+    .eq('template_id', templateId)
+    .order('id', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
+export async function addTemplateItem(templateId, food) {
+  const { error } = await supabase.from('meal_template_items').insert({
+    template_id: templateId,
+    food_name: food.food_name,
+    calories: food.calories || 0, protein: food.protein || 0,
+    carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0,
+    sugar: food.sugar || 0, sat_fat: food.sat_fat || 0,
+    meal_type: food.meal_type || 'snack',
+  });
+  if (error) throw error;
+}
+
+export async function removeTemplateItem(id) {
+  const { error } = await supabase.from('meal_template_items').delete().eq('id', id);
+  if (error) throw error;
+}
+
+export async function applyTemplate(templateId, mealType) {
+  const userId = await getUserId();
+  const items = await getTemplateItems(templateId);
+  const now = localISOString();
+  const rows = items.map((item) => ({
+    user_id: userId,
+    food_name: item.food_name,
+    calories: item.calories, protein: item.protein,
+    carbs: item.carbs, fat: item.fat, fiber: item.fiber || 0,
+    sugar: item.sugar || 0, sat_fat: item.sat_fat || 0,
+    meal_type: mealType || item.meal_type || 'snack',
+    timestamp: now, date: now.split('T')[0],
+  }));
+  if (rows.length) {
+    const { error } = await supabase.from('food_logs').insert(rows);
+    if (error) throw error;
+  }
+  return rows.length;
+}
+
+export async function getScheduledTemplates() {
+  const userId = await getUserId();
+  const { data, error } = await supabase
+    .from('meal_templates').select('*')
+    .eq('user_id', userId)
+    .not('schedule_time', 'is', null)
+    .order('schedule_time', { ascending: true });
+  if (error) throw error;
+  return data || [];
+}
+
 // ── CSV import ────────────────────────────────────────────────────────────────
 
 export async function importFromCSV(csvText) {

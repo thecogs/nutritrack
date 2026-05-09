@@ -4,7 +4,7 @@ import {
   StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
-import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite } from '../../services/db';
+import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
 import { smartDescribeFoods, searchFood } from '../../services/api';
 import { getDefaultMealType } from '../../services/mealTime';
 
@@ -365,6 +365,7 @@ export default function LogScreen() {
   const [actVisible,    setActVisible]    = useState(false);
   const [editItem,      setEditItem]      = useState(null);
   const [view,          setView]          = useState('meals');
+  const promptedRef = useRef(new Set());
 
   const load = useCallback(async () => {
     try {
@@ -375,7 +376,33 @@ export default function LogScreen() {
     } catch (e) { console.error(e); }
   }, []);
 
-  useFocusEffect(useCallback(() => { load(); }, [load]));
+  const checkScheduled = useCallback(async () => {
+    try {
+      const scheduled = await getScheduledTemplates();
+      if (!scheduled.length) return;
+      const now = new Date();
+      const curMins = now.getHours() * 60 + now.getMinutes();
+      for (const tmpl of scheduled) {
+        if (promptedRef.current.has(tmpl.id)) continue;
+        const [h, m] = (tmpl.schedule_time || '').split(':').map(Number);
+        if (isNaN(h)) continue;
+        if (Math.abs(curMins - (h * 60 + m)) <= 30) {
+          promptedRef.current.add(tmpl.id);
+          const defaultMeal = h < 11 ? 'breakfast' : h < 15 ? 'lunch' : h < 20 ? 'dinner' : 'snack';
+          Alert.alert(
+            `Time for ${tmpl.name}`,
+            'Log this meal now?',
+            [
+              { text: 'Skip', style: 'cancel' },
+              { text: 'Log Now', onPress: async () => { await applyTemplate(tmpl.id, defaultMeal); load(); } },
+            ]
+          );
+        }
+      }
+    } catch {}
+  }, [load]);
+
+  useFocusEffect(useCallback(() => { load(); checkScheduled(); }, [load, checkScheduled]));
 
   const totals = logs.reduce(
     (acc, item) => ({ calories: acc.calories+(item.calories||0), protein: acc.protein+(item.protein||0), carbs: acc.carbs+(item.carbs||0), fat: acc.fat+(item.fat||0), fiber: acc.fiber+(item.fiber||0), sugar: acc.sugar+(item.sugar||0), sat_fat: acc.sat_fat+(item.sat_fat||0) }),
