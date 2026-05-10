@@ -5,6 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getGoals, saveGoals, logWeight, getWeightLogs } from '../../services/db';
+import { ALLERGENS } from '../../services/allergens';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -44,6 +45,7 @@ function bmiCategory(b) {
 
 export default function GoalsScreen() {
   const [goals, setGoals] = useState({ calories: '2000', protein: '150', carbs: '250', fat: '65', fiber: '30', sugar: '50', sat_fat: '20' });
+  const [allergens, setAllergens]           = useState([]);
   const [heightIn, setHeightIn]             = useState('');
   const [includeActivity, setIncludeActivity] = useState(true);
   const [weightInput, setWeightInput]       = useState('');
@@ -73,6 +75,7 @@ export default function GoalsScreen() {
             });
             setHeightIn(data.height_in ? String(data.height_in) : '');
             setIncludeActivity(data.include_activity !== false && data.include_activity !== 0);
+            setAllergens(Array.isArray(data.allergens) ? data.allergens : []);
           }
           const todayEntry = (wLogs||[]).find((l) => l.date === toLocalDateStr());
           if (todayEntry) { setLatestWeight(todayEntry.weight); setWeightInput(String(todayEntry.weight)); }
@@ -94,6 +97,7 @@ export default function GoalsScreen() {
       sat_fat: parseFloat(goals.sat_fat) || 20,
       height_in:        parseFloat(heightIn) || 0,
       include_activity: includeActivity,
+      allergens,
     };
     try {
       await saveGoals(payload);
@@ -181,6 +185,26 @@ export default function GoalsScreen() {
             </View>
           </View>
 
+          {/* ── Allergens ── */}
+          <Text style={[s.sectionLabel, { marginTop: 24 }]}>Allergens &amp; Dietary Restrictions</Text>
+          <View style={s.statsCard}>
+            <Text style={s.allergenHint}>Select any allergens you have. You'll be warned if a scanned or logged food may contain them.</Text>
+            <View style={s.allergenGrid}>
+              {ALLERGENS.map((a) => {
+                const active = allergens.includes(a.key);
+                return (
+                  <TouchableOpacity
+                    key={a.key}
+                    style={[s.allergenChip, active && s.allergenChipActive]}
+                    onPress={() => setAllergens((prev) => active ? prev.filter((k) => k !== a.key) : [...prev, a.key])}
+                  >
+                    <Text style={[s.allergenChipText, active && s.allergenChipTextActive]}>{a.label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </View>
+
           {/* ── Body Stats ── */}
           <Text style={[s.sectionLabel, { marginTop: 24 }]}>Body Stats</Text>
           <View style={s.statsCard}>
@@ -248,6 +272,13 @@ const s = StyleSheet.create({
   toggleRow:   { flexDirection: 'row', alignItems: 'center', gap: 12 },
   toggleTitle: { color: TEXT, fontSize: 14, fontWeight: '600', marginBottom: 4 },
   toggleSub:   { color: DIM, fontSize: 12, lineHeight: 16 },
+
+  allergenHint:         { color: DIM, fontSize: 12, lineHeight: 17, marginBottom: 14 },
+  allergenGrid:         { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  allergenChip:         { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: BG, borderWidth: 1, borderColor: '#2A2A3A' },
+  allergenChipActive:   { backgroundColor: '#4A0A08', borderColor: G },
+  allergenChipText:     { color: DIM, fontSize: 13, fontWeight: '600' },
+  allergenChipTextActive: { color: '#FF8A80', fontWeight: '700' },
 
   presetRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 24 },
   presetBtn: { flex: 1, minWidth: '45%', backgroundColor: CARD, borderRadius: 14, padding: 14, alignItems: 'center' },

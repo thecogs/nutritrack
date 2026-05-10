@@ -71,16 +71,17 @@ function offToFood(p) {
   const name = p.product_name_en || p.product_name;
   if (!name) return null;
   return {
-    food_name:    name,
-    brand:        p.brands || '',
-    calories:     Math.round(n['energy-kcal_100g'] || n['energy-kcal'] || 0),
-    protein:      parseFloat((n['proteins_100g']      || 0).toFixed(1)),
-    carbs:        parseFloat((n['carbohydrates_100g'] || 0).toFixed(1)),
-    fat:          parseFloat((n['fat_100g']           || 0).toFixed(1)),
-    fiber:        parseFloat((n['fiber_100g'] || n['fibers_100g'] || 0).toFixed(1)),
-    sugar:        parseFloat((n['sugars_100g'] || n['sugars-total_100g'] || 0).toFixed(1)),
-    sat_fat:      parseFloat((n['saturated-fat_100g'] || 0).toFixed(1)),
-    serving_size: p.serving_size || '100g',
+    food_name:      name,
+    brand:          p.brands || '',
+    calories:       Math.round(n['energy-kcal_100g'] || n['energy-kcal'] || 0),
+    protein:        parseFloat((n['proteins_100g']      || 0).toFixed(1)),
+    carbs:          parseFloat((n['carbohydrates_100g'] || 0).toFixed(1)),
+    fat:            parseFloat((n['fat_100g']           || 0).toFixed(1)),
+    fiber:          parseFloat((n['fiber_100g'] || n['fibers_100g'] || 0).toFixed(1)),
+    sugar:          parseFloat((n['sugars_100g'] || n['sugars-total_100g'] || 0).toFixed(1)),
+    sat_fat:        parseFloat((n['saturated-fat_100g'] || 0).toFixed(1)),
+    serving_size:   p.serving_size || '100g',
+    allergens_tags: p.allergens_tags || [],
   };
 }
 
@@ -90,7 +91,7 @@ export async function lookupBarcode(barcode) {
   // 1. Open Food Facts (world)
   try {
     const res  = await fetchWithTimeout(
-      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,product_name_en,brands,nutriments,serving_size`,
+      `https://world.openfoodfacts.org/api/v2/product/${barcode}.json?fields=product_name,product_name_en,brands,nutriments,serving_size,allergens_tags`,
       {}, 10000
     );
     const data = await res.json();

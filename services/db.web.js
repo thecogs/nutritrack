@@ -97,7 +97,10 @@ export async function getGoals() {
     .from('user_goals').select('*')
     .eq('user_id', userId).single();
   if (error && error.code !== 'PGRST116') throw error;
-  return data || { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, sat_fat: 20, height_in: 0, include_activity: true };
+  if (data && data.allergens) {
+    try { data.allergens = JSON.parse(data.allergens); } catch { data.allergens = []; }
+  }
+  return data || { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, sugar: 50, sat_fat: 20, height_in: 0, include_activity: true, allergens: [] };
 }
 
 export async function saveGoals(goals) {
@@ -116,6 +119,7 @@ export async function saveGoals(goals) {
       sat_fat: goals.sat_fat ?? current.sat_fat ?? 20,
       height_in:        goals.height_in        ?? current.height_in        ?? 0,
       include_activity: goals.include_activity ?? current.include_activity ?? true,
+      allergens: JSON.stringify(goals.allergens ?? current.allergens ?? []),
     });
   if (error) throw error;
 }

@@ -7,8 +7,9 @@ import {
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { lookupBarcode, scanFoodPhoto } from '../../services/api';
-import { addLog } from '../../services/db';
+import { addLog, getGoals } from '../../services/db';
 import { getDefaultMealType } from '../../services/mealTime';
+import { checkAllergens } from '../../services/allergens';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -54,19 +55,24 @@ function MacroInput({ label, value, onChange, color, unit }) {
 function BarcodeScanner({ onClose }) {
   const [permission, requestPermission] = useCameraPermissions();
   const hasScanned = useRef(false);
-  const [loading,      setLoading]      = useState(false);
-  const [scanError,    setScanError]    = useState(false);
-  const [base,         setBase]         = useState(null);
-  const [foodData,     setFoodData]     = useState(null);
-  const [servingGrams, setServingGrams] = useState(100);
-  const [customGrams,  setCustomGrams]  = useState('');
-  const [mealType,     setMealType]     = useState(getDefaultMealType);
-  const [modalVisible, setModalVisible] = useState(false);
+  const [loading,        setLoading]        = useState(false);
+  const [scanError,      setScanError]      = useState(false);
+  const [base,           setBase]           = useState(null);
+  const [foodData,       setFoodData]       = useState(null);
+  const [servingGrams,   setServingGrams]   = useState(100);
+  const [customGrams,    setCustomGrams]    = useState('');
+  const [mealType,       setMealType]       = useState(getDefaultMealType);
+  const [modalVisible,   setModalVisible]   = useState(false);
+  const [allergenHits,   setAllergenHits]   = useState([]);
+  const userAllergensRef = useRef([]);
+
+  useEffect(() => { getGoals().then((g) => { userAllergensRef.current = g.allergens || []; }).catch(() => {}); }, []);
 
   const reset = () => {
     hasScanned.current = false;
     setBase(null); setFoodData(null); setScanError(false);
     setServingGrams(100); setCustomGrams(''); setMealType(getDefaultMealType()); setLoading(false);
+    setAllergenHits([]);
   };
 
   const handleBarCodeScanned = useCallback(async ({ data }) => {
@@ -78,6 +84,7 @@ function BarcodeScanner({ onClose }) {
       const b = { food_name: food.food_name, brand: food.brand, calories: food.calories, protein: food.protein, carbs: food.carbs, fat: food.fat, fiber: food.fiber||0, sugar: food.sugar||0, sat_fat: food.sat_fat||0 };
       setBase(b); setServingGrams(100); setCustomGrams('');
       setFoodData({ ...b, ...scaleMacros(b, 100) });
+      setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, food.allergens_tags));
     } catch { setScanError(true); } finally { setLoading(false); }
   }, []);
 
@@ -155,6 +162,11 @@ function BarcodeScanner({ onClose }) {
               <>
                 <Text style={s.modalTitle}>{foodData?.food_name}</Text>
                 {foodData?.brand ? <Text style={s.modalBrand}>{foodData.brand}</Text> : null}
+                {allergenHits.length > 0 && (
+                  <View style={s.allergenBanner}>
+                    <Text style={s.allergenBannerText}>⚠  Contains: {allergenHits.join(', ')}</Text>
+                  </View>
+                )}
                 <View style={s.macroGrid}>
                   {[['Calories','calories','kcal','#E05555'],['Protein','protein','g','#CE5400'],['Carbs','carbs','g','#08C343'],['Fat (Total)','fat','g','#FFD700'],['Fiber','fiber','g','#215CDA'],['Sugar','sugar','g','#FF6B9D'],['Sat. Fat','sat_fat','g','#FF6347']].map(([label,key,unit,color]) => (
                     <View key={label} style={s.macroDisplayCell}>
@@ -207,8 +219,8 @@ function PhotoScanner({ onClose }) {
   const [photoUri,   setPhotoUri]       = useState(null);
   const [foodName,   setFoodName]       = useState('');
   const [mealType,   setMealType]       = useState(getDefaultMealType);
-  const [dataSource,   setDataSource]   = useState(null); // 'usda' | 'label' | 'ai'
-  const [base,         setBase]         = useState(null); // per-100g values for re-scaling
+  const [dataSource,   setDataSource]   = useState(null);
+  const [base,         setBase]         = useState(null);
   const [servingGrams, setServingGrams] = useState(null);
   const [cal,   setCal]   = useState('');
   const [prot,  setProt]  = useState('');
@@ -217,6 +229,10 @@ function PhotoScanner({ onClose }) {
   const [fiber,   setFiber]   = useState('');
   const [sugar,   setSugar]   = useState('');
   const [satFat,  setSatFat]  = useState('');
+  const [allergenHits,   setAllergenHits]   = useState([]);
+  const userAllergensRef = useRef([]);
+
+  useEffect(() => { getGoals().then((g) => { userAllergensRef.current = g.allergens || []; }).catch(() => {}); }, []);
 
   const applyServing = (grams) => {
     if (!base) return;
@@ -234,6 +250,7 @@ function PhotoScanner({ onClose }) {
   const resetModal = () => {
     setPhotoUri(null); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber(''); setSugar(''); setSatFat('');
     setMealType(getDefaultMealType()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
+    setAllergenHits([]);
   };
 
   const handleCapture = async () => {
@@ -251,6 +268,7 @@ function PhotoScanner({ onClose }) {
       setDataSource(food.source || 'ai');
       if (food._base) { setBase(food._base); setServingGrams(food.grams || 100); }
       else { setBase(null); setServingGrams(null); }
+      setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, []));
     } catch {} finally { setAiLoading(false); }
   };
 
@@ -277,7 +295,12 @@ function PhotoScanner({ onClose }) {
         <View style={s.modalBg}>
           <ScrollView style={s.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
             {photoUri && <Image source={{ uri: photoUri }} style={s.preview} />}
-            <TextInput style={s.foodNameInput} value={foodName} onChangeText={setFoodName} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
+            <TextInput style={s.foodNameInput} value={foodName} onChangeText={(v) => { setFoodName(v); setAllergenHits(checkAllergens(v, userAllergensRef.current, [])); }} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
+            {allergenHits.length > 0 && (
+              <View style={s.allergenBanner}>
+                <Text style={s.allergenBannerText}>⚠  Contains: {allergenHits.join(', ')}</Text>
+              </View>
+            )}
             {aiLoading
               ? <View style={s.aiRow}><ActivityIndicator size="small" color={G} /><Text style={s.aiText}>Identifying food…</Text></View>
               : <Text style={s.aiNote}>
@@ -437,6 +460,8 @@ const s = StyleSheet.create({
   aiText: { color: G, fontSize: 13 },
   aiNote: { color: DIM, fontSize: 12, marginBottom: 14 },
 
+  allergenBanner:     { backgroundColor: 'rgba(224,50,50,0.15)', borderWidth: 1, borderColor: 'rgba(224,50,50,0.4)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 14 },
+  allergenBannerText: { color: '#FF6B6B', fontSize: 13, fontWeight: '700' },
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 4 },
   cancelBtn:    { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: SURF, alignItems: 'center' },
   cancelText:   { color: '#8892A4', fontWeight: '600' },
