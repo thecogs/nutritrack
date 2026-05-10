@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, updateFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
-import { smartDescribeFoods, searchFood } from '../../services/api';
+import { smartDescribeFoods, searchFood, searchOffAllergens } from '../../services/api';
 import { checkAllergens } from '../../services/allergens';
 import { getDefaultMealType } from '../../services/mealTime';
 
@@ -170,8 +170,10 @@ function AddFoodModal({ visible, onClose, onSave }) {
         setText(food.food_name || text.trim()); setBase(null);
         setMacros({ calories: String(food.calories??''), protein: String(food.protein??''), carbs: String(food.carbs??''), fat: String(food.fat??''), fiber: String(food.fiber??''), sugar: String(food.sugar??''), sat_fat: String(food.sat_fat??'') });
         setAiItems(null);
-        const hits = checkAllergens(food.food_name, userAllergensRef.current, []);
-        if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
+        searchOffAllergens(food.food_name).then((offTags) => {
+          const hits = checkAllergens(food.food_name, userAllergensRef.current, offTags);
+          if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
+        }).catch(() => {});
       } else { setAiItems(foods.map((f) => ({ ...f, excluded: false }))); }
     } catch { Alert.alert('AI estimate failed', 'Enter values manually below.'); }
     finally { setEstimating(false); }
@@ -182,8 +184,13 @@ function AddFoodModal({ visible, onClose, onSave }) {
     const b = { calories: item.calories, protein: item.protein, carbs: item.carbs, fat: item.fat, fiber: item.fiber||0, sugar: item.sugar||0, sat_fat: item.sat_fat||0 };
     setBase(b); setServingGrams(100); setText(item.food_name);
     setMacros({ calories: String(item.calories), protein: String(item.protein), carbs: String(item.carbs), fat: String(item.fat), fiber: String(item.fiber||0), sugar: String(item.sugar||0), sat_fat: String(item.sat_fat||0) });
-    const hits = checkAllergens(item.food_name, userAllergensRef.current, item.allergens_tags||[]);
-    if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
+    // Keyword check immediately, then upgrade with OFF data
+    const quickHits = checkAllergens(item.food_name, userAllergensRef.current, item.allergens_tags||[]);
+    if (quickHits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${quickHits.join(', ')}.`, [{ text: 'OK' }]);
+    else searchOffAllergens(item.food_name).then((offTags) => {
+      const hits = checkAllergens(item.food_name, userAllergensRef.current, offTags);
+      if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
+    }).catch(() => {});
   };
 
   const handleSave = async () => {

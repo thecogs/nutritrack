@@ -6,7 +6,7 @@ import {
 } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
-import { lookupBarcode, scanFoodPhoto } from '../../services/api';
+import { lookupBarcode, scanFoodPhoto, searchOffAllergens } from '../../services/api';
 import { addLog, getGoals } from '../../services/db';
 import { getDefaultMealType } from '../../services/mealTime';
 import { checkAllergens } from '../../services/allergens';
@@ -230,9 +230,20 @@ function PhotoScanner({ onClose }) {
   const [sugar,   setSugar]   = useState('');
   const [satFat,  setSatFat]  = useState('');
   const [allergenHits,   setAllergenHits]   = useState([]);
-  const userAllergensRef = useRef([]);
+  const userAllergensRef  = useRef([]);
+  const allergenTimerRef  = useRef(null);
 
   useEffect(() => { getGoals().then((g) => { userAllergensRef.current = g.allergens || []; }).catch(() => {}); }, []);
+
+  const checkFoodNameAllergens = useCallback((name) => {
+    setAllergenHits(checkAllergens(name, userAllergensRef.current, []));
+    clearTimeout(allergenTimerRef.current);
+    allergenTimerRef.current = setTimeout(() => {
+      searchOffAllergens(name).then((offTags) => {
+        setAllergenHits(checkAllergens(name, userAllergensRef.current, offTags));
+      }).catch(() => {});
+    }, 600);
+  }, []);
 
   const applyServing = (grams) => {
     if (!base) return;
@@ -268,7 +279,11 @@ function PhotoScanner({ onClose }) {
       setDataSource(food.source || 'ai');
       if (food._base) { setBase(food._base); setServingGrams(food.grams || 100); }
       else { setBase(null); setServingGrams(null); }
+      // Keyword check immediately, then upgrade with real OFF data in background
       setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, []));
+      searchOffAllergens(food.food_name).then((offTags) => {
+        setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, offTags));
+      }).catch(() => {});
     } catch {} finally { setAiLoading(false); }
   };
 
@@ -295,7 +310,7 @@ function PhotoScanner({ onClose }) {
         <View style={s.modalBg}>
           <ScrollView style={s.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
             {photoUri && <Image source={{ uri: photoUri }} style={s.preview} />}
-            <TextInput style={s.foodNameInput} value={foodName} onChangeText={(v) => { setFoodName(v); setAllergenHits(checkAllergens(v, userAllergensRef.current, [])); }} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
+            <TextInput style={s.foodNameInput} value={foodName} onChangeText={(v) => { setFoodName(v); checkFoodNameAllergens(v); }} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
             {allergenHits.length > 0 && (
               <View style={s.allergenBanner}>
                 <Text style={s.allergenBannerText}>⚠  Contains: {allergenHits.join(', ')}</Text>

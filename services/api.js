@@ -85,6 +85,28 @@ function offToFood(p) {
   };
 }
 
+// ── OFF allergen search ───────────────────────────────────────────────────────
+// Searches Open Food Facts by food name and returns merged allergens_tags from
+// the top results. Free, no API key, same source as our barcode lookups.
+
+export async function searchOffAllergens(foodName) {
+  if (!foodName || foodName.trim().length < 3) return [];
+  try {
+    const res = await fetchWithTimeout(
+      `https://world.openfoodfacts.org/api/v2/search?search_terms=${encodeURIComponent(foodName.trim())}&fields=allergens_tags&page_size=5&json=1`,
+      {}, 8000
+    );
+    const data = await res.json();
+    const tags = new Set();
+    for (const p of (data.products || []).slice(0, 5)) {
+      (p.allergens_tags || []).forEach((t) => tags.add(t));
+    }
+    return [...tags];
+  } catch {
+    return [];
+  }
+}
+
 // ── Barcode lookup ────────────────────────────────────────────────────────────
 
 export async function lookupBarcode(barcode) {
