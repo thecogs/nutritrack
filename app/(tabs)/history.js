@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV, getTemplates, createTemplate, deleteTemplate, getTemplateItems, addTemplateItem, applyTemplate } from '../../services/db';
-import { searchFood } from '../../services/api';
+import { searchFood, smartDescribeFoods } from '../../services/api';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -122,6 +122,8 @@ function TemplatesSection() {
   const [searchText,    setSearchText]    = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [searching,     setSearching]     = useState(false);
+  const [aiText,        setAiText]        = useState('');
+  const [estimating,    setEstimating]    = useState(false);
   const [mealType,      setMealType]      = useState('breakfast');
   const searchTimer = useRef(null);
 
@@ -157,6 +159,21 @@ function TemplatesSection() {
     setSearchText(''); setSearchResults([]);
   }
 
+  async function handleAiEstimate() {
+    if (!aiText.trim() || estimating) return;
+    setEstimating(true);
+    try {
+      const foods = await smartDescribeFoods(aiText.trim());
+      if (!foods.length) { Alert.alert('No foods found', 'Try describing your meal differently.'); return; }
+      setNewItems((prev) => [
+        ...prev,
+        ...foods.map((f) => ({ food_name: f.food_name, calories: f.calories||0, protein: f.protein||0, carbs: f.carbs||0, fat: f.fat||0, fiber: f.fiber||0, sugar: f.sugar||0, sat_fat: f.sat_fat||0, meal_type: 'snack' })),
+      ]);
+      setAiText('');
+    } catch { Alert.alert('AI estimate failed', 'Try again or add foods manually via search.'); }
+    finally { setEstimating(false); }
+  }
+
   async function handleCreate() {
     if (!tmplName.trim()) { Alert.alert('Name required'); return; }
     if (newItems.length === 0) { Alert.alert('Add at least one food'); return; }
@@ -165,7 +182,7 @@ function TemplatesSection() {
       for (const item of newItems) await addTemplateItem(id, item);
       await loadTemplates();
       setCreateVisible(false);
-      setTmplName(''); setSchedTime(''); setNewItems([]); setSearchText(''); setSearchResults([]);
+      setTmplName(''); setSchedTime(''); setNewItems([]); setSearchText(''); setSearchResults([]); setAiText('');
     } catch { Alert.alert('Error', 'Could not save template.'); }
   }
 
@@ -264,6 +281,34 @@ function TemplatesSection() {
               <TextInput style={ts.timeInput} value={schedTime} onChangeText={setSchedTime} placeholder="07:30" placeholderTextColor="#4A4D5E" keyboardType="numbers-and-punctuation" />
             </View>
             <Text style={ts.subLabel}>Add Foods</Text>
+
+            {/* AI Estimate */}
+            <View style={ts.aiRow}>
+              <TextInput
+                style={ts.aiInput}
+                value={aiText}
+                onChangeText={setAiText}
+                placeholder="e.g. banana, yogurt and coffee…"
+                placeholderTextColor="#4A4D5E"
+                autoCorrect={false}
+              />
+              <TouchableOpacity
+                style={[ts.aiBtn, (!aiText.trim() || estimating) && ts.aiBtnDisabled]}
+                onPress={handleAiEstimate}
+                disabled={!aiText.trim() || estimating}
+              >
+                {estimating
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={ts.aiBtnText}>✦ AI</Text>}
+              </TouchableOpacity>
+            </View>
+
+            {/* Divider */}
+            <View style={ts.aiDivider}>
+              <View style={ts.aiDividerLine} />
+              <Text style={ts.aiDividerText}>or search</Text>
+              <View style={ts.aiDividerLine} />
+            </View>
 
             {newItems.map((item, idx) => (
               <View key={idx} style={ts.newItemRow}>
@@ -547,6 +592,14 @@ const ts = StyleSheet.create({
   newItemName:{ flex: 1, color: TEXT, fontSize: 14 },
   newItemCal: { color: '#5A5248', fontSize: 12, marginRight: 12 },
 
+  aiRow:        { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  aiInput:      { flex: 1, backgroundColor: BG, color: TEXT, fontSize: 14, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12 },
+  aiBtn:        { backgroundColor: G, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, minWidth: 56, alignItems: 'center' },
+  aiBtnDisabled:{ backgroundColor: SURF },
+  aiBtnText:    { color: '#fff', fontWeight: '700', fontSize: 14 },
+  aiDivider:    { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  aiDividerLine:{ flex: 1, height: 1, backgroundColor: SURF },
+  aiDividerText:{ color: '#3A3D4A', fontSize: 11, fontWeight: '600' },
   searchRow:        { flexDirection: 'row', alignItems: 'center', backgroundColor: BG, borderRadius: 12, paddingHorizontal: 14, marginBottom: 6 },
   searchInput:      { flex: 1, color: TEXT, fontSize: 15, paddingVertical: 12 },
   searchResult:     { backgroundColor: BG, borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginBottom: 4, borderBottomWidth: 1, borderBottomColor: SURF },
