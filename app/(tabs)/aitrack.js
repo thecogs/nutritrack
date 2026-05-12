@@ -264,12 +264,7 @@ function PhotoScanner({ onClose }) {
     setAllergenHits([]);
   };
 
-  const handleCapture = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed to photograph food.'); return; }
-    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false });
-    if (result.canceled) return;
-    const asset = result.assets[0];
+  const processAsset = async (asset) => {
     setPhotoUri(asset.uri); setModalVisible(true); setAiLoading(true);
     try {
       const food = await scanFoodPhoto(asset.base64, 'image/jpeg');
@@ -279,12 +274,27 @@ function PhotoScanner({ onClose }) {
       setDataSource(food.source || 'ai');
       if (food._base) { setBase(food._base); setServingGrams(food.grams || 100); }
       else { setBase(null); setServingGrams(null); }
-      // Keyword check immediately, then upgrade with real OFF data in background
       setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, []));
       searchOffAllergens(food.food_name).then((offTags) => {
         setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, offTags));
       }).catch(() => {});
     } catch {} finally { setAiLoading(false); }
+  };
+
+  const handleCapture = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed to photograph food.'); return; }
+    const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false });
+    if (result.canceled) return;
+    await processAsset(result.assets[0]);
+  };
+
+  const handlePickLibrary = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed to upload photos.'); return; }
+    const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false });
+    if (result.canceled) return;
+    await processAsset(result.assets[0]);
   };
 
   const handleLog = async () => {
@@ -302,8 +312,9 @@ function PhotoScanner({ onClose }) {
       <View style={s.photoLaunch}>
         <TouchableOpacity style={s.backBtn} onPress={onClose}><Text style={s.backBtnText}>✕</Text></TouchableOpacity>
         <Text style={s.launchTitle}>AI Food Scanner</Text>
-        <Text style={s.launchSub}>Take a photo of your meal and Claude will estimate macros automatically.</Text>
-        <TouchableOpacity style={s.captureBtn} onPress={handleCapture}><Text style={s.captureBtnText}>Open Camera</Text></TouchableOpacity>
+        <Text style={s.launchSub}>Take a photo of your meal or upload one from your library and Claude will estimate macros automatically.</Text>
+        <TouchableOpacity style={s.captureBtn} onPress={handleCapture}><Text style={s.captureBtnText}>📷  Open Camera</Text></TouchableOpacity>
+        <TouchableOpacity style={s.uploadBtn} onPress={handlePickLibrary}><Text style={s.uploadBtnText}>🖼  Upload from Library</Text></TouchableOpacity>
       </View>
 
       <Modal visible={modalVisible} animationType="slide" transparent>
@@ -428,8 +439,10 @@ const s = StyleSheet.create({
   photoLaunch: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
   launchTitle: { color: TEXT, fontSize: 22, fontWeight: '700', marginBottom: 12 },
   launchSub:   { color: DIM, fontSize: 14, textAlign: 'center', lineHeight: 21, marginBottom: 44 },
-  captureBtn:  { backgroundColor: G, paddingHorizontal: 52, paddingVertical: 18, borderRadius: 28 },
+  captureBtn:  { backgroundColor: G, paddingHorizontal: 52, paddingVertical: 18, borderRadius: 28, width: '100%', alignItems: 'center' },
   captureBtnText: { color: '#fff', fontWeight: '700', fontSize: 18 },
+  uploadBtn:   { backgroundColor: SURF, paddingHorizontal: 52, paddingVertical: 18, borderRadius: 28, width: '100%', alignItems: 'center', marginTop: 14, borderWidth: 1, borderColor: '#2A3A28' },
+  uploadBtnText: { color: TEXT, fontWeight: '700', fontSize: 18 },
 
   modalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.88)', justifyContent: 'flex-end' },
   modal:   { backgroundColor: CARD, borderTopLeftRadius: 28, borderTopRightRadius: 28, padding: 24, maxHeight: '90%' },
