@@ -5,7 +5,7 @@ import {
 } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, updateFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
-import { smartDescribeFoods, searchFood, searchOffAllergens } from '../../services/api';
+import { smartDescribeFoods, searchFood, searchOffAllergens, strictLookupFoods } from '../../services/api';
 import { checkAllergens } from '../../services/allergens';
 import { getDefaultMealType } from '../../services/mealTime';
 
@@ -160,7 +160,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
     }, 400);
   };
 
-  const handleEstimate = async () => {
+  const handleEstimateAI = async () => {
     if (!text.trim() || estimating) return;
     pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setEstimating(true);
     try {
@@ -176,6 +176,25 @@ function AddFoodModal({ visible, onClose, onSave }) {
         }).catch(() => {});
       } else { setAiItems(foods.map((f) => ({ ...f, excluded: false }))); }
     } catch { Alert.alert('AI estimate failed', 'Enter values manually below.'); }
+    finally { setEstimating(false); }
+  };
+
+  const handleStrictLookup = async () => {
+    if (!text.trim() || estimating) return;
+    pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setEstimating(true);
+    try {
+      const foods = await strictLookupFoods(text.trim());
+      if (foods.length === 1) {
+        const food = foods[0];
+        setText(food.food_name || text.trim()); setBase(null);
+        setMacros({ calories: String(food.calories??''), protein: String(food.protein??''), carbs: String(food.carbs??''), fat: String(food.fat??''), fiber: String(food.fiber??''), sugar: String(food.sugar??''), sat_fat: String(food.sat_fat??'') });
+        setAiItems(null);
+        searchOffAllergens(food.food_name).then((offTags) => {
+          const hits = checkAllergens(food.food_name, userAllergensRef.current, offTags);
+          if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
+        }).catch(() => {});
+      } else { setAiItems(foods.map((f) => ({ ...f, excluded: false }))); }
+    } catch { Alert.alert('Lookup failed', 'Could not parse or find items.'); }
     finally { setEstimating(false); }
   };
 
@@ -299,9 +318,14 @@ function AddFoodModal({ visible, onClose, onSave }) {
                 <TextInput style={styles.mainInput} placeholder="Search or describe what you ate…" placeholderTextColor="#4A4D5E" value={text} onChangeText={handleTextChange} autoCorrect={false} />
                 {searching && <ActivityIndicator size="small" color="#4A4D5E" style={{ marginRight: 6 }} />}
               </View>
-              <TouchableOpacity style={[styles.estimateBtn, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleEstimate} disabled={!text.trim()||estimating}>
-                {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>✦  Estimate with AI</Text>}
-              </TouchableOpacity>
+              <View style={{flexDirection: 'row', gap: 8, marginBottom: 14}}>
+                <TouchableOpacity style={[styles.estimateBtn, {flex: 1, marginBottom: 0}, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleEstimateAI} disabled={!text.trim()||estimating}>
+                  {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>✦ Log with AI</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity style={[styles.estimateBtn, {flex: 1, backgroundColor: '#4CAF7F', marginBottom: 0}, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleStrictLookup} disabled={!text.trim()||estimating}>
+                  {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>Strict DB Lookup</Text>}
+                </TouchableOpacity>
+              </View>
               {results.length > 0 && (
                 <View style={styles.resultsList}>
                   <Text style={styles.resultsHeader}>SEARCH RESULTS  (per 100g)</Text>

@@ -183,20 +183,60 @@ async function searchOFF(q) {
     });
 }
 
+// ── FatSecret Search ─────────────────────────────────────────────────────────
+
+export async function searchFatSecret(query) {
+  const isWeb = Platform.OS === 'web';
+  if (!isWeb) return []; 
+  try {
+    const res = await fetchWithTimeout('/api/fatsecret', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ query })
+    }, 10000);
+    const data = await res.json();
+    
+    const foods = data?.foods?.food || [];
+    const items = Array.isArray(foods) ? foods : [foods];
+    
+    return items.map(f => {
+      const desc = f.food_description || '';
+      const caloriesMatch = desc.match(/Calories:\s*(\d+)kcal/i);
+      const fatMatch = desc.match(/Fat:\s*([\d.]+)g/i);
+      const carbsMatch = desc.match(/Carbs:\s*([\d.]+)g/i);
+      const proteinMatch = desc.match(/Protein:\s*([\d.]+)g/i);
+      
+      return {
+        food_name: f.brand_name ? `${f.food_name} — ${f.brand_name}` : f.food_name,
+        calories: caloriesMatch ? Math.round(parseFloat(caloriesMatch[1])) : 0,
+        fat: fatMatch ? parseFloat(fatMatch[1]) : 0,
+        carbs: carbsMatch ? parseFloat(carbsMatch[1]) : 0,
+        protein: proteinMatch ? parseFloat(proteinMatch[1]) : 0,
+        serving_size: f.food_description?.split('-')[0]?.trim() || '100g',
+        per100g: desc.includes('100g')
+      };
+    }).filter(f => f.calories > 0);
+  } catch {
+    return [];
+  }
+}
+
 export async function searchWholeFoods(q) {
   try { return await searchUSDA(q, 'Foundation,SR Legacy', 20); } catch { return []; }
 }
 
 export async function searchFood(q) {
   if (!q || q.trim().length < 2) return [];
-  const [whole, branded, off] = await Promise.allSettled([
+  const [whole, branded, off, fatsecret] = await Promise.allSettled([
     searchUSDA(q, 'Foundation,SR Legacy', 12),
     searchUSDA(q, 'Branded Food', 8),
     searchOFF(q),
+    searchFatSecret(q)
   ]);
   const seen = new Set();
   return [
     ...(whole.value   || []),
+    ...(fatsecret.value || []),
     ...(branded.value || []),
     ...(off.value     || []),
   ].filter((item) => {
@@ -337,6 +377,77 @@ export async function smartDescribeFoods(text) {
   } catch {}
   // Fall back to Gemini for anything the DB can't handle
   return describeFoods(text);
+}
+
+// ── Strict DB Lookup (Gemini as Parser) ───────────────────────────────────────
+
+export async function parseFoodText(text) {
+  return withRetry(async () => {
+    const result = await gemini({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [{
+          text:
+            `You are a text parser. The user ate: "${text}"\n\n` +
+            `Extract EACH distinct food item and its precise quantity.\n` +
+            `Return ONLY a JSON array with NO markdown:\n` +
+            `[{"food_name":"specific food name", "quantity":"e.g. 200g, 1 cup, 2 slices"}]`
+        }]
+      }],
+      generationConfig: { responseMimeType: "application/json" }
+    }, 20000);
+    const arrMatch = result.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      const arr = JSON.parse(arrMatch[0]);
+      if (Array.isArray(arr) && arr.length > 0) return arr;
+    }
+    return [parseJSON(result)];
+  });
+}
+
+export async function strictLookupFoods(text) {
+  const parsedItems = await parseFoodText(text);
+  const results = [];
+  
+  for (const item of parsedItems) {
+    const query = `${item.quantity || ''} ${item.food_name}`.trim();
+    const { grams, food } = parseQuantityText(query);
+    
+    let best = null;
+    const wholeResults = await searchWholeFoods(food).catch(() => []);
+    if (wholeResults.length > 0) best = wholeResults[0];
+    
+    if (!best) {
+      const fs = await searchFatSecret(food).catch(() => []);
+      if (fs.length > 0) best = fs[0];
+    }
+    if (!best) {
+      const branded = await searchUSDA(food, 'Branded Food', 5).catch(() => []);
+      if (branded.length > 0) best = branded[0];
+    }
+    
+    if (best) {
+      // FatSecret results might not be per 100g if they specify a serving. 
+      // For simplicity, we scale based on 100g equivalent if per100g is true, 
+      // or assume the FatSecret serving is 1 unit and try to scale it.
+      const scale = best.per100g ? (grams / 100) : ((parseFloat(item.quantity) || 1));
+      
+      results.push({
+        food_name: query,
+        calories:  Math.round((best.calories||0) * scale),
+        protein:   Math.round((best.protein||0)  * scale * 10) / 10,
+        carbs:     Math.round((best.carbs||0)    * scale * 10) / 10,
+        fat:       Math.round((best.fat||0)      * scale * 10) / 10,
+        fiber:     Math.round((best.fiber || 0) * scale * 10) / 10,
+        sugar:     Math.round((best.sugar || 0) * scale * 10) / 10,
+        sat_fat:   Math.round((best.sat_fat || 0) * scale * 10) / 10,
+      });
+    } else {
+      results.push({ food_name: `${query} (Not found)`, calories: 0, protein: 0, carbs: 0, fat: 0 });
+    }
+  }
+  return results;
 }
 
 // ── Gemini text — natural language food description ───────────────────────────
