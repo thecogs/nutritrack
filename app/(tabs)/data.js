@@ -162,6 +162,47 @@ function WeightChart({ data, days }) {
   );
 }
 
+// ── Macro Breakdown Chart ──────────────────────────────────────────────────────
+
+function MacroChart({ data }) {
+  const screenWidth = Dimensions.get('window').width;
+  const chartW = screenWidth - 32;
+  const chartH = 36;
+  
+  const avgP = data.length ? data.reduce((s, d) => s + (d.protein||0), 0) / data.length : 0;
+  const avgC = data.length ? data.reduce((s, d) => s + (d.carbs||0), 0) / data.length : 0;
+  const avgF = data.length ? data.reduce((s, d) => s + (d.fat||0), 0) / data.length : 0;
+  const total = avgP + avgC + avgF || 1;
+  
+  const pctP = avgP / total;
+  const pctC = avgC / total;
+  const pctF = avgF / total;
+
+  return (
+    <View style={{ width: '100%', alignItems: 'center' }}>
+      <Svg width={chartW} height={chartH} style={{ borderRadius: 18, overflow: 'hidden' }}>
+        <Rect x={0} y={0} width={(chartW * pctP).toFixed(1)} height={chartH} fill="#E05555" />
+        <Rect x={(chartW * pctP).toFixed(1)} y={0} width={(chartW * pctC).toFixed(1)} height={chartH} fill="#4CAF7F" />
+        <Rect x={(chartW * (pctP + pctC)).toFixed(1)} y={0} width={(chartW * pctF).toFixed(1)} height={chartH} fill="#E8B042" />
+      </Svg>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', marginTop: 12, paddingHorizontal: 8 }}>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: '#E05555', fontSize: 14, fontWeight: '700' }}>{Math.round(avgP)}g</Text>
+          <Text style={{ color: DIM, fontSize: 10, textTransform: 'uppercase', marginTop: 2 }}>Protein</Text>
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: '#4CAF7F', fontSize: 14, fontWeight: '700' }}>{Math.round(avgC)}g</Text>
+          <Text style={{ color: DIM, fontSize: 10, textTransform: 'uppercase', marginTop: 2 }}>Carbs</Text>
+        </View>
+        <View style={{ alignItems: 'center' }}>
+          <Text style={{ color: '#E8B042', fontSize: 14, fontWeight: '700' }}>{Math.round(avgF)}g</Text>
+          <Text style={{ color: DIM, fontSize: 10, textTransform: 'uppercase', marginTop: 2 }}>Fat</Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
 // ── Period selector ───────────────────────────────────────────────────────────
 
 function PeriodPicker({ periods, selected, onSelect }) {
@@ -290,6 +331,18 @@ export default function DataScreen() {
           <View style={s.legendItem}><View style={[s.legendDot, { backgroundColor: '#E05555' }]} /><Text style={s.legendText}>Over goal</Text></View>
         </View>
       )}
+
+      {/* ── Macros ── */}
+      <Text style={[s.sectionTitle, { marginTop: 24 }]}>AVERAGE MACROS</Text>
+      <View style={s.chartCard}>
+        {filteredCal.length > 0 ? (
+          <MacroChart data={filteredCal} />
+        ) : (
+          <View style={s.chartEmpty}>
+            <Text style={s.chartEmptyText}>Log food to see your macronutrient split</Text>
+          </View>
+        )}
+      </View>
 
       {/* ── Weight ── */}
       <Text style={[s.sectionTitle, { marginTop: 24 }]}>WEIGHT</Text>

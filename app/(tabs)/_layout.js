@@ -84,7 +84,6 @@ export default function TabLayout() {
       />
 
       {/* Hidden legacy tabs — functionality moved into new tabs */}
-      <Tabs.Screen name="scan"   options={{ href: null }} />
       <Tabs.Screen name="camera" options={{ href: null }} />
       <Tabs.Screen name="weight" options={{ href: null }} />
     </Tabs>

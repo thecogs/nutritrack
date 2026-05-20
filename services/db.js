@@ -219,7 +219,13 @@ export async function getDailyCalorieTotals(days = 30) {
   since.setDate(since.getDate() - days);
   const sinceStr = new Date(since.getTime() - since.getTimezoneOffset() * 60000).toISOString().split('T')[0];
   const rows = await db.getAllAsync(
-    `SELECT date(timestamp) as date, ROUND(SUM(calories)) as calories
+    `SELECT date(timestamp) as date, 
+            ROUND(SUM(calories)) as calories,
+            ROUND(SUM(protein)) as protein,
+            ROUND(SUM(carbs)) as carbs,
+            ROUND(SUM(fat)) as fat,
+            ROUND(SUM(fiber)) as fiber,
+            ROUND(SUM(sugar)) as sugar
      FROM food_logs WHERE date(timestamp) >= ?
      GROUP BY date(timestamp) ORDER BY date(timestamp) ASC`,
     [sinceStr]

@@ -43,6 +43,39 @@ function parseJSON(text) {
   return JSON.parse(match[0]);
 }
 
+// ── Grocery List Generation ────────────────────────────────────────────────────
+
+export async function generateGroceryList(items) {
+  if (!items || items.length === 0) return [];
+  const textList = items.join(', ');
+  
+  return withRetry(async () => {
+    const result = await gemini({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [{
+          text:
+            `You are a grocery planning assistant. Consolidate this list of foods into a clean grocery list:\n\n` +
+            `${textList}\n\n` +
+            `1. Combine identical items and sum their quantities (e.g. "1/2 cup milk" + "1 cup milk" = "1.5 cups milk").\n` +
+            `2. Group them by category: Produce, Dairy, Meat, Pantry, Frozen, Other.\n` +
+            `3. Return ONLY a JSON array with NO markdown in this format:\n` +
+            `[{"category":"Produce", "items":["2 bananas", "1 apple"]}, {"category":"Dairy", "items":["1.5 cups milk"]}]`
+        }]
+      }],
+      generationConfig: { responseMimeType: "application/json" }
+    }, 25000);
+    
+    const arrMatch = result.match(/\[[\s\S]*\]/);
+    if (arrMatch) {
+      const arr = JSON.parse(arrMatch[0]);
+      if (Array.isArray(arr)) return arr;
+    }
+    return [parseJSON(result)];
+  });
+}
+
 // ── USDA helpers ──────────────────────────────────────────────────────────────
 
 function parseUsdaNutrients(foodNutrients) {

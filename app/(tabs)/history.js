@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV, getTemplates, createTemplate, deleteTemplate, getTemplateItems, addTemplateItem, applyTemplate } from '../../services/db';
-import { searchFood, smartDescribeFoods } from '../../services/api';
+import { searchFood, smartDescribeFoods, generateGroceryList } from '../../services/api';
 
 const G    = '#471914';
 const BG   = '#070F05';
@@ -125,6 +125,9 @@ function TemplatesSection() {
   const [aiText,        setAiText]        = useState('');
   const [estimating,    setEstimating]    = useState(false);
   const [mealType,      setMealType]      = useState('breakfast');
+  const [selectedTmpls, setSelectedTmpls] = useState(new Set());
+  const [groceryList,   setGroceryList]   = useState(null);
+  const [generating,    setGenerating]    = useState(false);
   const searchTimer = useRef(null);
 
   useEffect(() => { loadTemplates(); }, []);
@@ -141,6 +144,36 @@ function TemplatesSection() {
     if (expanded === id) { setExpanded(null); return; }
     setExpanded(id);
     loadItems(id);
+  }
+
+  function toggleSelect(id) {
+    const next = new Set(selectedTmpls);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    setSelectedTmpls(next);
+  }
+
+  async function handleGenerateGrocery() {
+    if (selectedTmpls.size === 0) { Alert.alert('Select templates', 'Please select at least one template to generate a list.'); return; }
+    setGenerating(true);
+    try {
+      const allFoodNames = [];
+      for (const tid of selectedTmpls) {
+        let tmplItems = items[tid];
+        if (!tmplItems) {
+          tmplItems = await getTemplateItems(tid);
+          setItems(p => ({ ...p, [tid]: tmplItems }));
+        }
+        tmplItems.forEach(i => allFoodNames.push(i.food_name));
+      }
+      if (allFoodNames.length === 0) { Alert.alert('Empty', 'Selected templates have no items.'); setGenerating(false); return; }
+      
+      const result = await generateGroceryList(allFoodNames);
+      setGroceryList(result);
+    } catch {
+      Alert.alert('Error', 'Failed to generate grocery list.');
+    } finally {
+      setGenerating(false);
+    }
   }
 
   function handleSearch(t) {
@@ -225,6 +258,18 @@ function TemplatesSection() {
           <Text style={ts.newBtnText}>+ New</Text>
         </TouchableOpacity>
       </View>
+      
+      {templates.length > 0 && (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 10 }}>
+          <TouchableOpacity 
+            style={[ts.groceryBtn, selectedTmpls.size === 0 && { opacity: 0.5 }]} 
+            onPress={handleGenerateGrocery}
+            disabled={selectedTmpls.size === 0 || generating}
+          >
+            {generating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={ts.groceryBtnText}>🛒 Grocery List ({selectedTmpls.size})</Text>}
+          </TouchableOpacity>
+        </View>
+      )}
 
       {templates.length === 0 && (
         <Text style={ts.empty}>No templates yet. Save a meal combo to log it in one tap.</Text>
@@ -237,6 +282,11 @@ function TemplatesSection() {
         return (
           <View key={tmpl.id} style={ts.card}>
             <TouchableOpacity style={ts.cardTop} onPress={() => toggleExpand(tmpl.id)} activeOpacity={0.75}>
+              <TouchableOpacity onPress={() => toggleSelect(tmpl.id)} style={{ paddingRight: 12, justifyContent: 'center' }}>
+                <View style={[ts.checkbox, selectedTmpls.has(tmpl.id) && ts.checkboxActive]}>
+                  {selectedTmpls.has(tmpl.id) && <Text style={ts.checkboxCheck}>✓</Text>}
+                </View>
+              </TouchableOpacity>
               <View style={{ flex: 1 }}>
                 <Text style={ts.cardName}>{tmpl.name}</Text>
                 <Text style={ts.cardMeta}>
@@ -368,6 +418,29 @@ function TemplatesSection() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Grocery List Modal ── */}
+      <Modal visible={!!groceryList} animationType="slide" transparent={true}>
+        <View style={ts.modalBg}>
+          <View style={[ts.modalBody, { maxHeight: '80%' }]}>
+            <Text style={ts.modalTitle}>Grocery List</Text>
+            <ScrollView style={{ marginTop: 16 }}>
+              {(groceryList || []).map((cat, i) => (
+                <View key={i} style={{ marginBottom: 16 }}>
+                  <Text style={{ color: '#4CAF7F', fontWeight: '700', fontSize: 13, textTransform: 'uppercase', marginBottom: 6 }}>{cat.category}</Text>
+                  {cat.items.map((item, j) => (
+                    <Text key={j} style={{ color: '#B6A8A2', fontSize: 15, marginBottom: 4 }}>• {item}</Text>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+            <TouchableOpacity style={[ts.saveBtn, { marginTop: 24, backgroundColor: '#471914' }]} onPress={() => setGroceryList(null)}>
+              <Text style={ts.saveBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
     </View>
   );
 }
@@ -561,9 +634,16 @@ const ts = StyleSheet.create({
   sectionLabel:  { color: G, fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2 },
   newBtn:        { backgroundColor: G, paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10 },
   newBtnText:    { color: '#fff', fontSize: 13, fontWeight: '700' },
-  empty:         { color: '#3A3A5A', fontSize: 13, textAlign: 'center', paddingVertical: 12 },
+  empty:         { color: '#5A5248', fontSize: 13, textAlign: 'center', marginTop: 10, paddingBottom: 10 },
 
-  card:    { backgroundColor: CARD, borderRadius: 16, marginBottom: 10, overflow: 'hidden' },
+  groceryBtn: { backgroundColor: '#471914', paddingVertical: 8, paddingHorizontal: 16, borderRadius: 16 },
+  groceryBtnText: { color: '#B6A8A2', fontSize: 12, fontWeight: '600' },
+  
+  checkbox: { width: 22, height: 22, borderRadius: 6, borderWidth: 1.5, borderColor: '#5A5248', alignItems: 'center', justifyContent: 'center' },
+  checkboxActive: { backgroundColor: '#4CAF7F', borderColor: '#4CAF7F' },
+  checkboxCheck: { color: '#070F05', fontSize: 14, fontWeight: '800' },
+
+  card:    { backgroundColor: '#0D1B0B', borderRadius: 14, marginBottom: 10, overflow: 'hidden' },
   cardTop: { flexDirection: 'row', alignItems: 'center', padding: 14 },
   cardName:{ color: TEXT, fontSize: 15, fontWeight: '700' },
   cardMeta:{ color: '#5A5248', fontSize: 12, marginTop: 2 },
