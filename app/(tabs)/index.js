@@ -164,7 +164,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
     if (!text.trim() || estimating) return;
     pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setEstimating(true);
     try {
-      const foods = await smartDescribeFoods(text.trim());
+      const foods = await strictLookupFoods(text.trim());
       if (foods.length === 1) {
         const food = foods[0];
         setText(food.food_name || text.trim()); setBase(null);
@@ -179,24 +179,7 @@ function AddFoodModal({ visible, onClose, onSave }) {
     finally { setEstimating(false); }
   };
 
-  const handleStrictLookup = async () => {
-    if (!text.trim() || estimating) return;
-    pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setEstimating(true);
-    try {
-      const foods = await strictLookupFoods(text.trim());
-      if (foods.length === 1) {
-        const food = foods[0];
-        setText(food.food_name || text.trim()); setBase(null);
-        setMacros({ calories: String(food.calories??''), protein: String(food.protein??''), carbs: String(food.carbs??''), fat: String(food.fat??''), fiber: String(food.fiber??''), sugar: String(food.sugar??''), sat_fat: String(food.sat_fat??'') });
-        setAiItems(null);
-        searchOffAllergens(food.food_name).then((offTags) => {
-          const hits = checkAllergens(food.food_name, userAllergensRef.current, offTags);
-          if (hits.length) Alert.alert('⚠ Allergen Warning', `This food may contain: ${hits.join(', ')}.`, [{ text: 'OK' }]);
-        }).catch(() => {});
-      } else { setAiItems(foods.map((f) => ({ ...f, excluded: false }))); }
-    } catch { Alert.alert('Lookup failed', 'Could not parse or find items.'); }
-    finally { setEstimating(false); }
-  };
+
 
   const pickResult = (item) => {
     pickedRef.current = true; clearTimeout(searchTimer.current); setResults([]); setSearching(false); setAiItems(null);
@@ -318,14 +301,9 @@ function AddFoodModal({ visible, onClose, onSave }) {
                 <TextInput style={styles.mainInput} placeholder="Search or describe what you ate…" placeholderTextColor="#4A4D5E" value={text} onChangeText={handleTextChange} autoCorrect={false} />
                 {searching && <ActivityIndicator size="small" color="#4A4D5E" style={{ marginRight: 6 }} />}
               </View>
-              <View style={{flexDirection: 'row', gap: 8, marginBottom: 14}}>
-                <TouchableOpacity style={[styles.estimateBtn, {flex: 1, marginBottom: 0}, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleEstimateAI} disabled={!text.trim()||estimating}>
-                  {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>✦ Log with AI</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity style={[styles.estimateBtn, {flex: 1, backgroundColor: '#4CAF7F', marginBottom: 0}, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleStrictLookup} disabled={!text.trim()||estimating}>
-                  {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>Strict DB Lookup</Text>}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity style={[styles.estimateBtn, (!text.trim()||estimating) && styles.estimateBtnDisabled]} onPress={handleEstimateAI} disabled={!text.trim()||estimating}>
+                {estimating ? <ActivityIndicator size="small" color="#fff" /> : <Text style={styles.estimateBtnText}>✦ Log with AI</Text>}
+              </TouchableOpacity>
               {results.length > 0 && (
                 <View style={styles.resultsList}>
                   <Text style={styles.resultsHeader}>SEARCH RESULTS  (per 100g)</Text>

@@ -163,7 +163,7 @@ function TemplatesSection() {
     if (!aiText.trim() || estimating) return;
     setEstimating(true);
     try {
-      const foods = await smartDescribeFoods(aiText.trim());
+      const foods = await strictLookupFoods(aiText.trim());
       if (!foods.length) { Alert.alert('No foods found', 'Try describing your meal differently.'); return; }
       setNewItems((prev) => [
         ...prev,
@@ -292,39 +292,15 @@ function TemplatesSection() {
                 placeholderTextColor="#4A4D5E"
                 autoCorrect={false}
               />
-              <View style={{flexDirection: 'row', gap: 6}}>
-                <TouchableOpacity
-                  style={[ts.aiBtn, (!aiText.trim() || estimating) && ts.aiBtnDisabled]}
-                  onPress={handleAiEstimate}
-                  disabled={!aiText.trim() || estimating}
-                >
-                  {estimating
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={ts.aiBtnText}>✦ AI</Text>}
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[ts.aiBtn, {backgroundColor: '#4CAF7F'}, (!aiText.trim() || estimating) && ts.aiBtnDisabled]}
-                  onPress={async () => {
-                    if (!aiText.trim() || estimating) return;
-                    setEstimating(true);
-                    try {
-                      const foods = await strictLookupFoods(aiText.trim());
-                      if (!foods.length) { Alert.alert('Not found', 'Try searching manually.'); return; }
-                      setNewItems((prev) => [
-                        ...prev,
-                        ...foods.map((f) => ({ food_name: f.food_name, calories: f.calories||0, protein: f.protein||0, carbs: f.carbs||0, fat: f.fat||0, fiber: f.fiber||0, sugar: f.sugar||0, sat_fat: f.sat_fat||0, meal_type: 'snack' })),
-                      ]);
-                      setAiText('');
-                    } catch { Alert.alert('Lookup failed', 'Try searching manually.'); }
-                    finally { setEstimating(false); }
-                  }}
-                  disabled={!aiText.trim() || estimating}
-                >
-                  {estimating
-                    ? <ActivityIndicator size="small" color="#fff" />
-                    : <Text style={ts.aiBtnText}>DB</Text>}
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[ts.aiBtn, (!aiText.trim() || estimating) && ts.aiBtnDisabled]}
+                onPress={handleAiEstimate}
+                disabled={!aiText.trim() || estimating}
+              >
+                {estimating
+                  ? <ActivityIndicator size="small" color="#fff" />
+                  : <Text style={ts.aiBtnText}>✦ AI</Text>}
+              </TouchableOpacity>
             </View>
 
             {/* Divider */}
