@@ -345,7 +345,13 @@ export async function smartDescribeFoods(text) {
       const wholeResults = await searchWholeFoods(food).catch(() => []);
       if (wholeResults.length > 0) best = wholeResults[0];
 
-      // 2. If sugar missing (USDA search only returns ~25 nutrients — sugar often absent),
+      // 2. Try FatSecret if USDA whole foods fails
+      if (!best) {
+        const fs = await searchFatSecret(food).catch(() => []);
+        if (fs.length > 0) best = fs[0];
+      }
+
+      // 3. If sugar missing (USDA search only returns ~25 nutrients — sugar often absent),
       //    try branded foods which always declare sugar on label
       if (!best || best.sugar === 0) {
         try {
@@ -361,16 +367,17 @@ export async function smartDescribeFoods(text) {
       }
 
       if (best) {
-        const scale = grams / 100;
+        // Handle FatSecret items which might not be per 100g
+        const scale = best.per100g ? (grams / 100) : 1;
         return [{
           food_name: trimmed,
-          calories:  Math.round(best.calories * scale),
-          protein:   Math.round(best.protein  * scale * 10) / 10,
-          carbs:     Math.round(best.carbs    * scale * 10) / 10,
-          fat:       Math.round(best.fat      * scale * 10) / 10,
+          calories:  Math.round((best.calories||0) * scale),
+          protein:   Math.round((best.protein||0)  * scale * 10) / 10,
+          carbs:     Math.round((best.carbs||0)    * scale * 10) / 10,
+          fat:       Math.round((best.fat||0)      * scale * 10) / 10,
           fiber:     Math.round((best.fiber || 0) * scale * 10) / 10,
-          sugar:   Math.round((best.sugar   || 0) * scale * 10) / 10,
-          sat_fat: Math.round((best.sat_fat || 0) * scale * 10) / 10,
+          sugar:     Math.round((best.sugar   || 0) * scale * 10) / 10,
+          sat_fat:   Math.round((best.sat_fat || 0) * scale * 10) / 10,
         }];
       }
     }
@@ -379,76 +386,9 @@ export async function smartDescribeFoods(text) {
   return describeFoods(text);
 }
 
-// ── Strict DB Lookup (Gemini as Parser) ───────────────────────────────────────
 
-export async function parseFoodText(text) {
-  return withRetry(async () => {
-    const result = await gemini({
-      model: 'gemini-2.5-flash',
-      contents: [{
-        role: 'user',
-        parts: [{
-          text:
-            `You are a text parser. The user ate: "${text}"\n\n` +
-            `Extract EACH distinct food item and its precise quantity.\n` +
-            `Return ONLY a JSON array with NO markdown:\n` +
-            `[{"food_name":"specific food name", "quantity":"e.g. 200g, 1 cup, 2 slices"}]`
-        }]
-      }],
-      generationConfig: { responseMimeType: "application/json" }
-    }, 20000);
-    const arrMatch = result.match(/\[[\s\S]*\]/);
-    if (arrMatch) {
-      const arr = JSON.parse(arrMatch[0]);
-      if (Array.isArray(arr) && arr.length > 0) return arr;
-    }
-    return [parseJSON(result)];
-  });
-}
 
-export async function strictLookupFoods(text) {
-  const parsedItems = await parseFoodText(text);
-  const results = [];
-  
-  for (const item of parsedItems) {
-    const query = `${item.quantity || ''} ${item.food_name}`.trim();
-    const { grams, food } = parseQuantityText(query);
-    
-    let best = null;
-    const wholeResults = await searchWholeFoods(food).catch(() => []);
-    if (wholeResults.length > 0) best = wholeResults[0];
-    
-    if (!best) {
-      const fs = await searchFatSecret(food).catch(() => []);
-      if (fs.length > 0) best = fs[0];
-    }
-    if (!best) {
-      const branded = await searchUSDA(food, 'Branded Food', 5).catch(() => []);
-      if (branded.length > 0) best = branded[0];
-    }
-    
-    if (best) {
-      // FatSecret results might not be per 100g if they specify a serving. 
-      // For simplicity, we scale based on 100g equivalent if per100g is true, 
-      // or assume the FatSecret serving is 1 unit and try to scale it.
-      const scale = best.per100g ? (grams / 100) : ((parseFloat(item.quantity) || 1));
-      
-      results.push({
-        food_name: query,
-        calories:  Math.round((best.calories||0) * scale),
-        protein:   Math.round((best.protein||0)  * scale * 10) / 10,
-        carbs:     Math.round((best.carbs||0)    * scale * 10) / 10,
-        fat:       Math.round((best.fat||0)      * scale * 10) / 10,
-        fiber:     Math.round((best.fiber || 0) * scale * 10) / 10,
-        sugar:     Math.round((best.sugar || 0) * scale * 10) / 10,
-        sat_fat:   Math.round((best.sat_fat || 0) * scale * 10) / 10,
-      });
-    } else {
-      results.push({ food_name: `${query} (Not found)`, calories: 0, protein: 0, carbs: 0, fat: 0 });
-    }
-  }
-  return results;
-}
+
 
 // ── Gemini text — natural language food description ───────────────────────────
 // Returns an array of food objects. Single food → 1-element array.

@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
 import { useFocusEffect } from 'expo-router';
 import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV, getTemplates, createTemplate, deleteTemplate, getTemplateItems, addTemplateItem, applyTemplate } from '../../services/db';
-import { searchFood, smartDescribeFoods, strictLookupFoods } from '../../services/api';
+import { searchFood, smartDescribeFoods } from '../../services/api';
 
 const G    = '#471914';
 const BG   = '#070F05';
