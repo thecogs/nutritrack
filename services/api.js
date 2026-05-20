@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 
-const ANTHROPIC_API_KEY = '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';
+const GEMINI_API_KEY = 'AIzaSyDuTVvX7IReROy88RsY3L48hGXiRNUY-d8';
 const USDA_API_KEY      = 'DEMO_KEY';                     // swap for a real key at api.nal.usda.gov
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -24,20 +24,17 @@ function toTitleCase(str) {
   return (str || '').toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
-// ── Claude API wrapper ────────────────────────────────────────────────────────
+// ── Gemini API wrapper ────────────────────────────────────────────────────────
 
-async function claude(body, ms = 18000) {
+async function gemini(body, ms = 18000) {
   const isWeb = Platform.OS === 'web';
-  const url     = isWeb ? '/api/proxy' : 'https://api.anthropic.com/v1/messages';
+  const model = body.model || 'gemini-2.5-flash';
+  const url     = isWeb ? '/api/proxy' : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${GEMINI_API_KEY}`;
   const headers = { 'content-type': 'application/json' };
-  if (!isWeb) {
-    headers['x-api-key']         = ANTHROPIC_API_KEY;
-    headers['anthropic-version'] = '2023-06-01';
-  }
   const res  = await fetchWithTimeout(url, { method: 'POST', headers, body: JSON.stringify(body) }, ms);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error?.message || `Claude error ${res.status}`);
-  return data.content?.[0]?.text ?? '';
+  if (!res.ok) throw new Error(data.error?.message || `Gemini error ${res.status}`);
+  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 }
 
 function parseJSON(text) {
@@ -210,35 +207,37 @@ export async function searchFood(q) {
   });
 }
 
-// ── Claude vision — food photo ────────────────────────────────────────────────
-// Step 1: Claude identifies food name + portion grams (+ reads label if present)
+// ── Gemini vision — food photo ────────────────────────────────────────────────
+// Step 1: Gemini identifies food name + portion grams (+ reads label if present)
 // Step 2: USDA lookup scaled to identified grams
-// Step 3: Fall back to Claude's own macro estimates if USDA has no match
+// Step 3: Fall back to Gemini's own macro estimates if USDA has no match
 
 export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
   return withRetry(async () => {
-    const text = await claude({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      messages: [{
+    const text = await gemini({
+      model: 'gemini-2.5-flash',
+      contents: [{
         role: 'user',
-        content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
-          { type: 'text',  text:
+        parts: [
+          { inlineData: { mimeType: mimeType, data: base64Image } },
+          { text:
             'You are a nutrition expert analyzing a food photo.\n' +
             '1. Identify the food as specifically as possible (e.g. "grilled chicken breast" not just "chicken").\n' +
             '2. Estimate the portion weight in grams using visual cues (plate, utensils, hand).\n' +
             '3. If this is a nutrition facts label, set is_label:true and read the values directly from the label.\n' +
             'Return ONLY valid JSON with no markdown:\n' +
-            '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number,"sat_fat":number}',
-          },
-        ],
+            '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number,"sat_fat":number}'
+          }
+        ]
       }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
     }, 20000);
 
     const identified = parseJSON(text);
 
-    // Nutrition label photo → trust Claude's direct reading, it's accurate
+    // Nutrition label photo → trust Gemini's direct reading, it's accurate
     if (identified.is_label) {
       return { ...identified, source: 'label' };
     }
@@ -267,12 +266,12 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
       }
     } catch {}
 
-    // Fall back to Claude's own macro estimates
+    // Fall back to Gemini's own macro estimates
     return { ...identified, source: 'ai' };
   });
 }
 
-// ── Smart describe: regex → USDA first, Claude fallback ──────────────────────
+// ── Smart describe: regex → USDA first, Gemini fallback ──────────────────────
 
 const UNIT_GRAMS = {
   g:1, gram:1, grams:1,
@@ -336,35 +335,39 @@ export async function smartDescribeFoods(text) {
       }
     }
   } catch {}
-  // Fall back to Claude for anything the DB can't handle
+  // Fall back to Gemini for anything the DB can't handle
   return describeFoods(text);
 }
 
-// ── Claude text — natural language food description ───────────────────────────
+// ── Gemini text — natural language food description ───────────────────────────
 // Returns an array of food objects. Single food → 1-element array.
 // Multi-item descriptions ("mac and cheese and two hot dogs") → multiple elements.
 
 export async function describeFoods(text) {
   return withRetry(async () => {
-    const result = await claude({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 800,
-      messages: [{
-        role:    'user',
-        content:
-          `You are a precise nutrition expert using USDA Foundation values.\n` +
-          `The user ate: "${text}"\n\n` +
-          `Identify EACH distinct food item and estimate macros for the exact quantity described.\n` +
-          `Rules:\n` +
-          `- One array entry per distinct food (e.g. mac and cheese + hot dogs → 2 entries)\n` +
-          `- Respect quantities exactly: "half a box"=half package, "2 hot dogs"=2 individual hot dogs, "4oz"=113g\n` +
-          `- For branded foods (Goodles, etc.) use actual product nutrition facts\n` +
-          `- No quantity given → use a realistic single serving\n` +
-          `- Whole foods → USDA Foundation values\n` +
-          `- Include dietary fiber\n\n` +
-          `Return ONLY a valid JSON array, no markdown:\n` +
-          `[{"food_name":"concise name with quantity","calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number,"sat_fat":number}]`,
+    const result = await gemini({
+      model: 'gemini-2.5-flash',
+      contents: [{
+        role: 'user',
+        parts: [{
+          text:
+            `You are a precise nutrition expert using USDA Foundation values.\n` +
+            `The user ate: "${text}"\n\n` +
+            `Identify EACH distinct food item and estimate macros for the exact quantity described.\n` +
+            `Rules:\n` +
+            `- One array entry per distinct food (e.g. mac and cheese + hot dogs → 2 entries)\n` +
+            `- Respect quantities exactly: "half a box"=half package, "2 hot dogs"=2 individual hot dogs, "4oz"=113g\n` +
+            `- For branded foods (Goodles, etc.) use actual product nutrition facts\n` +
+            `- No quantity given → use a realistic single serving\n` +
+            `- Whole foods → USDA Foundation values\n` +
+            `- Include dietary fiber\n\n` +
+            `Return ONLY a valid JSON array, no markdown:\n` +
+            `[{"food_name":"concise name with quantity","calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number,"sat_fat":number}]`
+        }]
       }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
     }, 20000);
 
     // Try array first, fall back to wrapping a single object
@@ -378,7 +381,7 @@ export async function describeFoods(text) {
   });
 }
 
-// ── Claude — nutrition advisor ────────────────────────────────────────────────
+// ── Gemini — nutrition advisor ────────────────────────────────────────────────
 
 export async function getAdvice(messages, userGoals, todayLog) {
   const goals = userGoals || { calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30 };
@@ -422,11 +425,15 @@ export async function getAdvice(messages, userGoals, todayLog) {
     `Meals today: ${log.length ? log.map((m) => `${m.food_name} (${Math.round(m.calories)} kcal)`).join(', ') : 'none yet'}`;
 
   return withRetry(async () => {
-    const reply = await claude({
-      model:      'claude-haiku-4-5-20251001',
-      max_tokens: 512,
-      system,
-      messages:   messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+    const reply = await gemini({
+      model: 'gemini-2.5-flash',
+      systemInstruction: {
+        parts: [{ text: system }]
+      },
+      contents: messages.map((m) => ({
+        role: m.role === 'assistant' ? 'model' : 'user',
+        parts: [{ text: m.content }]
+      }))
     }, 20000);
     if (!reply) throw new Error('Empty response from advisor');
     return { reply };
