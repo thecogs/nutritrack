@@ -245,10 +245,15 @@ async function importCSV() {
   if (Platform.OS === 'web') {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.csv,.xlsx';
+    // No `accept` filter: iOS Safari's file picker can hide files whose
+    // declared type doesn't match, even by extension — validate after picking instead.
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
+      if (!/\.(csv|xlsx)$/i.test(file.name)) {
+        Alert.alert('Unsupported file', 'Please choose a .csv or .xlsx file.');
+        return;
+      }
       try {
         let result;
         if (/\.xlsx$/i.test(file.name)) {
@@ -268,14 +273,18 @@ async function importCSV() {
 
   try {
     const picked = await DocumentPicker.getDocumentAsync({
-      type: [
-        'text/csv',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      ],
+      // No type filter: iOS can hide files whose declared UTI doesn't match,
+      // even for the right extension — validate after picking instead.
+      type: '*/*',
       copyToCacheDirectory: true,
     });
     if (picked.canceled || !picked.assets?.[0]) return;
     const { uri, name } = picked.assets[0];
+
+    if (!/\.(csv|xlsx)$/i.test(name)) {
+      Alert.alert('Unsupported file', 'Please choose a .csv or .xlsx file.');
+      return;
+    }
 
     let result;
     if (/\.xlsx$/i.test(name)) {
