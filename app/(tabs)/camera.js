@@ -4,6 +4,7 @@ import {
   Modal, Alert, ActivityIndicator, Image, ScrollView, TextInput,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import * as ImageManipulator from 'expo-image-manipulator';
 import { scanFoodPhoto } from '../../services/api';
 import { addLog } from '../../services/db';
 import { getDefaultMealType } from '../../services/mealTime';
@@ -77,7 +78,14 @@ export default function CameraScreen() {
     setAiLoading(true);
 
     try {
-      const food = await scanFoodPhoto(asset.base64, 'image/jpeg');
+      // Source photos (especially iPhone camera/library) are often HEIC, which
+      // the vision model can't read — always re-encode to JPEG first.
+      const jpeg = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      const food = await scanFoodPhoto(jpeg.base64, 'image/jpeg');
       setFoodName(food.food_name || '');
       setEditCal(String(food.calories  ?? ''));
       setEditProt(String(food.protein  ?? ''));

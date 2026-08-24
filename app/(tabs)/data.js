@@ -2,8 +2,11 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, Dimensions, Alert, Platform } from 'react-native';
 import { TouchableOpacity } from 'react-native';
 import { useFocusEffect } from 'expo-router';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system';
 import Svg, { Path, Line, Rect, Circle, Text as SvgText, G as SvgG } from 'react-native-svg';
-import { getDailyCalorieTotals, getWeightLogs, getGoals, getAllFoodLogs, getWeightLogs as getWeightLogsAll, importFromCSV } from '../../services/db';
+import { getDailyCalorieTotals, getWeightLogs, getGoals, getAllFoodLogs, getWeightLogs as getWeightLogsAll, importFromCSV, importFromMacroFactor } from '../../services/db';
+import { parseMacroFactorWorkbook } from '../../services/macrofactorImport';
 
 const ACCENT = '#471914';
 const BG     = '#070F05';
@@ -239,19 +242,52 @@ async function exportCSV() {
 }
 
 async function importCSV() {
-  if (Platform.OS !== 'web') { Alert.alert('Import', 'CSV import is available on web only.'); return; }
-  const input = document.createElement('input');
-  input.type = 'file'; input.accept = '.csv,text/csv';
-  input.onchange = async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const result = await importFromCSV(text);
-      Alert.alert('Import complete', `Imported ${result.food} food entries and ${result.weight} weight entries.`);
-    } catch (err) { Alert.alert('Import failed', err.message || 'Could not parse CSV.'); }
-  };
-  input.click();
+  if (Platform.OS === 'web') {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        let result;
+        if (/\.xlsx$/i.test(file.name)) {
+          const buf = await file.arrayBuffer();
+          const { foodRows, weightRows } = parseMacroFactorWorkbook(buf, 'array');
+          result = await importFromMacroFactor(foodRows, weightRows);
+        } else {
+          const text = await file.text();
+          result = await importFromCSV(text);
+        }
+        Alert.alert('Import complete', `Imported ${result.food} food entries and ${result.weight} weight entries.`);
+      } catch (err) { Alert.alert('Import failed', err.message || 'Could not parse file.'); }
+    };
+    input.click();
+    return;
+  }
+
+  try {
+    const picked = await DocumentPicker.getDocumentAsync({
+      type: [
+        'text/csv',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      ],
+      copyToCacheDirectory: true,
+    });
+    if (picked.canceled || !picked.assets?.[0]) return;
+    const { uri, name } = picked.assets[0];
+
+    let result;
+    if (/\.xlsx$/i.test(name)) {
+      const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
+      const { foodRows, weightRows } = parseMacroFactorWorkbook(base64, 'base64');
+      result = await importFromMacroFactor(foodRows, weightRows);
+    } else {
+      const text = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.UTF8 });
+      result = await importFromCSV(text);
+    }
+    Alert.alert('Import complete', `Imported ${result.food} food entries and ${result.weight} weight entries.`);
+  } catch (err) { Alert.alert('Import failed', err.message || 'Could not parse file.'); }
 }
 
 export default function DataScreen() {
@@ -386,7 +422,7 @@ export default function DataScreen() {
       {/* ── Import / Export ── */}
       <Text style={[s.sectionTitle, { marginTop: 24 }]}>DATA</Text>
       <TouchableOpacity style={s.csvBtn} onPress={importCSV}>
-        <Text style={s.csvBtnText}>Import CSV</Text>
+        <Text style={s.csvBtnText}>Import CSV / MacroFactor Export</Text>
       </TouchableOpacity>
       <TouchableOpacity style={[s.csvBtn, { marginTop: 8 }]} onPress={exportCSV}>
         <Text style={s.csvBtnText}>Export All Data as CSV</Text>

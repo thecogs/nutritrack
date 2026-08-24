@@ -432,3 +432,20 @@ export async function importFromCSV(csvText) {
   }
   return { food: foodRows.length, weight: weightRows.length };
 }
+
+export async function importFromMacroFactor(foodRows, weightRows) {
+  const userId = await getUserId();
+  const foods = foodRows.map((f) => ({ ...f, user_id: userId }));
+  const weights = weightRows.map((w) => ({ ...w, user_id: userId }));
+
+  if (foods.length) {
+    const { error } = await supabase.from('food_logs').upsert(foods, { ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  if (weights.length) {
+    const { error } = await supabase.from('weight_logs')
+      .upsert(weights, { onConflict: 'user_id,date', ignoreDuplicates: true });
+    if (error) throw error;
+  }
+  return { food: foods.length, weight: weights.length };
+}

@@ -370,3 +370,17 @@ export async function importFromCSV(csvText) {
   }
   return { food: foodCount, weight: weightCount };
 }
+
+export async function importFromMacroFactor(foodRows, weightRows) {
+  const db = await getDb();
+  for (const f of foodRows) {
+    await db.runAsync(
+      'INSERT INTO food_logs (food_name, calories, protein, carbs, fat, fiber, meal_type, timestamp) VALUES (?,?,?,?,?,?,?,?)',
+      [f.food_name, f.calories, f.protein, f.carbs, f.fat, f.fiber, f.meal_type, f.timestamp]
+    );
+  }
+  for (const w of weightRows) {
+    await db.runAsync('INSERT OR IGNORE INTO weight_logs (date, weight) VALUES (?,?)', [w.date, w.weight]);
+  }
+  return { food: foodRows.length, weight: weightRows.length };
+}
