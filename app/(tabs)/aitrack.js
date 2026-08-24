@@ -214,12 +214,26 @@ function BarcodeScanner({ onClose }) {
 
 // ── AI Photo scanner ──────────────────────────────────────────────────────────
 
+const MAX_PHOTOS = 3;
+
+function todayLocalDate() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function shiftDate(dateStr, days) {
+  const d = new Date(dateStr + 'T00:00:00');
+  d.setDate(d.getDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function PhotoScanner({ onClose }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [aiLoading, setAiLoading]       = useState(false);
-  const [photoUri,   setPhotoUri]       = useState(null);
+  const [photos,     setPhotos]         = useState([]); // [{ uri, base64, mimeType }]
   const [foodName,   setFoodName]       = useState('');
   const [mealType,   setMealType]       = useState(getDefaultMealType);
+  const [logDate,    setLogDate]        = useState(todayLocalDate);
   const [dataSource,   setDataSource]   = useState(null);
   const [base,         setBase]         = useState(null);
   const [servingGrams, setServingGrams] = useState(null);
@@ -260,22 +274,17 @@ function PhotoScanner({ onClose }) {
   };
 
   const resetModal = () => {
-    setPhotoUri(null); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber(''); setSugar(''); setSatFat('');
-    setMealType(getDefaultMealType()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
+    setPhotos([]); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber(''); setSugar(''); setSatFat('');
+    setMealType(getDefaultMealType()); setLogDate(todayLocalDate()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
     setAllergenHits([]);
   };
 
-  const processAsset = async (asset) => {
-    setPhotoUri(asset.uri); setModalVisible(true); setAiLoading(true);
+  // Re-runs identification using every photo added so far (up to MAX_PHOTOS),
+  // so multiple angles (or a plate shot + nutrition label) inform one result.
+  const analyze = async (photoList) => {
+    setAiLoading(true);
     try {
-      // Source photos (especially iPhone camera/library) are often HEIC, which
-      // the vision model can't read — always re-encode to JPEG first.
-      const jpeg = await ImageManipulator.manipulateAsync(
-        asset.uri,
-        [{ resize: { width: 1024 } }],
-        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
-      );
-      const food = await scanFoodPhoto(jpeg.base64, 'image/jpeg');
+      const food = await scanFoodPhoto(photoList.map(({ base64, mimeType }) => ({ base64, mimeType })));
       setFoodName(food.food_name||'');
       setCal(String(food.calories??'')); setProt(String(food.protein??'')); setCarb(String(food.carbs??''));
       setFat(String(food.fat??'')); setFiber(String(food.fiber??'')); setSugar(String(food.sugar??'')); setSatFat(String(food.sat_fat??''));
@@ -291,12 +300,37 @@ function PhotoScanner({ onClose }) {
     } finally { setAiLoading(false); }
   };
 
+  const addPhoto = async (asset) => {
+    setModalVisible(true);
+    try {
+      // Source photos (especially iPhone camera/library) are often HEIC, which
+      // the vision model can't read — always re-encode to JPEG first.
+      const jpeg = await ImageManipulator.manipulateAsync(
+        asset.uri,
+        [{ resize: { width: 1024 } }],
+        { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
+      );
+      const next = [...photos, { uri: asset.uri, base64: jpeg.base64, mimeType: 'image/jpeg' }].slice(0, MAX_PHOTOS);
+      setPhotos(next);
+      await analyze(next);
+    } catch (err) {
+      setFoodName('AI error: ' + (err?.message || String(err)));
+    }
+  };
+
+  const removePhoto = async (index) => {
+    const next = photos.filter((_, i) => i !== index);
+    setPhotos(next);
+    if (next.length === 0) { setModalVisible(false); resetModal(); }
+    else await analyze(next);
+  };
+
   const handleCapture = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') { Alert.alert('Permission required', 'Camera access is needed to photograph food.'); return; }
     const result = await ImagePicker.launchCameraAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false });
     if (result.canceled) return;
-    await processAsset(result.assets[0]);
+    await addPhoto(result.assets[0]);
   };
 
   const handlePickLibrary = async () => {
@@ -304,15 +338,15 @@ function PhotoScanner({ onClose }) {
     if (status !== 'granted') { Alert.alert('Permission required', 'Photo library access is needed to upload photos.'); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ base64: true, quality: 0.5, mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: false });
     if (result.canceled) return;
-    await processAsset(result.assets[0]);
+    await addPhoto(result.assets[0]);
   };
 
   const handleLog = async () => {
     const name = foodName.trim() || 'Unknown food';
     try {
-      await addLog({ food_name: name, calories: parseFloat(cal)||0, protein: parseFloat(prot)||0, carbs: parseFloat(carb)||0, fat: parseFloat(fat)||0, fiber: parseFloat(fiber)||0, sugar: parseFloat(sugar)||0, sat_fat: parseFloat(satFat)||0, meal_type: mealType, photo_url: photoUri });
+      await addLog({ food_name: name, calories: parseFloat(cal)||0, protein: parseFloat(prot)||0, carbs: parseFloat(carb)||0, fat: parseFloat(fat)||0, fiber: parseFloat(fiber)||0, sugar: parseFloat(sugar)||0, sat_fat: parseFloat(satFat)||0, meal_type: mealType, photo_url: photos[0]?.uri || null, date: logDate });
       setModalVisible(false); resetModal();
-      Alert.alert('Logged!', `${name} added to ${mealType}.`);
+      Alert.alert('Logged!', `${name} added to ${mealType}${logDate !== todayLocalDate() ? ` on ${logDate}` : ''}.`);
       onClose();
     } catch { Alert.alert('Error', 'Failed to save — please try again.'); }
   };
@@ -330,7 +364,29 @@ function PhotoScanner({ onClose }) {
       <Modal visible={modalVisible} animationType="slide" transparent>
         <View style={s.modalBg}>
           <ScrollView style={s.modal} contentContainerStyle={{ paddingBottom: 36 }} keyboardShouldPersistTaps="handled">
-            {photoUri && <Image source={{ uri: photoUri }} style={s.preview} />}
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={s.thumbRow} contentContainerStyle={{ gap: 10 }}>
+              {photos.map((p, i) => (
+                <View key={i} style={s.thumbWrap}>
+                  <Image source={{ uri: p.uri }} style={s.thumb} />
+                  <TouchableOpacity style={s.thumbRemove} onPress={() => removePhoto(i)}>
+                    <Text style={s.thumbRemoveText}>✕</Text>
+                  </TouchableOpacity>
+                </View>
+              ))}
+              {photos.length < MAX_PHOTOS && (
+                <View style={s.thumbAddCol}>
+                  <TouchableOpacity style={s.thumbAddBtn} onPress={handleCapture}>
+                    <Text style={s.thumbAddBtnText}>📷</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={s.thumbAddBtn} onPress={handlePickLibrary}>
+                    <Text style={s.thumbAddBtnText}>🖼</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </ScrollView>
+            {photos.length > 0 && photos.length < MAX_PHOTOS && (
+              <Text style={s.aiNote}>Add up to {MAX_PHOTOS} photos (different angles or a nutrition label) for a more accurate read.</Text>
+            )}
             <TextInput style={s.foodNameInput} value={foodName} onChangeText={(v) => { setFoodName(v); checkFoodNameAllergens(v); }} placeholder={aiLoading ? 'Identifying food…' : 'Food name'} placeholderTextColor="#3A3D4A" />
             {allergenHits.length > 0 && (
               <View style={s.allergenBanner}>
@@ -374,6 +430,21 @@ function PhotoScanner({ onClose }) {
                   <Text style={[s.mealBtnText, mealType===type && s.mealBtnTextActive]}>{type[0].toUpperCase()+type.slice(1)}</Text>
                 </TouchableOpacity>
               ))}
+            </View>
+            <Text style={s.sectionLabel}>Log date</Text>
+            <View style={s.mealRow}>
+              {[0, -1, -2].map((offset) => {
+                const d = shiftDate(todayLocalDate(), offset);
+                const label = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : d;
+                return (
+                  <TouchableOpacity key={offset} style={[s.mealBtn, logDate===d && s.mealBtnActive]} onPress={() => setLogDate(d)}>
+                    <Text style={[s.mealBtnText, logDate===d && s.mealBtnTextActive]}>{label}</Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <View style={s.customRow}>
+              <TextInput style={s.customInput} placeholder="Or type a date: YYYY-MM-DD" placeholderTextColor="#404060" value={logDate} onChangeText={setLogDate} />
             </View>
             <View style={s.modalActions}>
               <TouchableOpacity style={s.cancelBtn} onPress={() => { setModalVisible(false); resetModal(); }}><Text style={s.cancelText}>Retake</Text></TouchableOpacity>
@@ -493,6 +564,14 @@ const s = StyleSheet.create({
   mealBtnTextActive: { color: '#fff', fontWeight: '700' },
 
   preview:       { width: '100%', height: 180, borderRadius: 16, marginBottom: 16 },
+  thumbRow:      { marginBottom: 8 },
+  thumbWrap:     { position: 'relative' },
+  thumb:         { width: 84, height: 84, borderRadius: 12 },
+  thumbRemove:   { position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: 11, backgroundColor: 'rgba(0,0,0,0.75)', alignItems: 'center', justifyContent: 'center' },
+  thumbRemoveText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  thumbAddCol:   { flexDirection: 'row', gap: 8 },
+  thumbAddBtn:   { width: 84, height: 84, borderRadius: 12, backgroundColor: SURF, alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#2A3A28' },
+  thumbAddBtnText: { fontSize: 26 },
   foodNameInput: { color: TEXT, fontSize: 20, fontWeight: '700', backgroundColor: SURF, borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, marginBottom: 8 },
   aiRow:  { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 14 },
   aiText: { color: G, fontSize: 13 },

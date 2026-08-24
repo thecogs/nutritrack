@@ -52,7 +52,8 @@ export async function getAllFoodLogs() {
 
 export async function addLog(food) {
   const userId = await getUserId();
-  const now = localISOString();
+  // `date` lets a caller log to a past day; defaults to right now.
+  const timestamp = food.date ? `${food.date}T12:00:00` : localISOString();
   const { data, error } = await supabase
     .from('food_logs')
     .insert({
@@ -60,7 +61,7 @@ export async function addLog(food) {
       calories: food.calories || 0, protein: food.protein || 0,
       carbs: food.carbs || 0, fat: food.fat || 0, fiber: food.fiber || 0, sugar: food.sugar || 0, sat_fat: food.sat_fat || 0,
       meal_type: food.meal_type || 'snack', photo_url: food.photo_url || null,
-      timestamp: now, date: now.split('T')[0],
+      timestamp, date: food.date || timestamp.split('T')[0],
     })
     .select('id').single();
   if (error) throw error;

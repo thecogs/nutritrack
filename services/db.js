@@ -124,10 +124,11 @@ export async function getAllFoodLogs() {
 
 export async function addLog(food) {
   const db = await getDb();
-  const now = localISOString();
+  // `date` lets a caller log to a past day; defaults to right now.
+  const timestamp = food.date ? `${food.date}T12:00:00` : localISOString();
   const result = await db.runAsync(
     'INSERT INTO food_logs (food_name, calories, protein, carbs, fat, fiber, sugar, sat_fat, meal_type, photo_url, timestamp) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, food.meal_type||'snack', food.photo_url||null, now]
+    [food.food_name, food.calories||0, food.protein||0, food.carbs||0, food.fat||0, food.fiber||0, food.sugar||0, food.sat_fat||0, food.meal_type||'snack', food.photo_url||null, timestamp]
   );
   return { id: result.lastInsertRowId };
 }

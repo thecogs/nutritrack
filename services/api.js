@@ -284,7 +284,10 @@ export async function searchFood(q) {
 // Step 2: USDA lookup scaled to identified grams
 // Step 3: Fall back to Claude's own macro estimates if USDA has no match
 
-export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
+// `images` is an array of { base64, mimeType } — 1 to 3 photos of the same
+// meal (e.g. different angles, or a plate shot plus a nutrition label).
+export async function scanFoodPhoto(images) {
+  const list = Array.isArray(images) ? images : [images];
   return withRetry(async () => {
     const text = await claude({
       model: CLAUDE_MODEL,
@@ -292,12 +295,17 @@ export async function scanFoodPhoto(base64Image, mimeType = 'image/jpeg') {
       messages: [{
         role: 'user',
         content: [
-          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64Image } },
+          ...list.map((img) => ({
+            type: 'image',
+            source: { type: 'base64', media_type: img.mimeType || 'image/jpeg', data: img.base64 },
+          })),
           { type: 'text', text:
-            'You are a nutrition expert analyzing a food photo.\n' +
+            (list.length > 1
+              ? `You are given ${list.length} photos of the same meal (different angles and/or a nutrition label) — use all of them together.\n`
+              : 'You are a nutrition expert analyzing a food photo.\n') +
             '1. Identify the food as specifically as possible (e.g. "grilled chicken breast" not just "chicken").\n' +
             '2. Estimate the portion weight in grams using visual cues (plate, utensils, hand).\n' +
-            '3. If this is a nutrition facts label, set is_label:true and read the values directly from the label.\n' +
+            '3. If any photo is a nutrition facts label, set is_label:true and read the values directly from the label.\n' +
             'Return ONLY valid JSON with no markdown:\n' +
             '{"food_name":"specific name","grams":number,"is_label":false,"calories":number,"protein":number,"carbs":number,"fat":number,"fiber":number,"sugar":number,"sat_fat":number}'
           }

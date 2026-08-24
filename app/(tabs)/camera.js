@@ -85,7 +85,7 @@ export default function CameraScreen() {
         [{ resize: { width: 1024 } }],
         { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG, base64: true }
       );
-      const food = await scanFoodPhoto(jpeg.base64, 'image/jpeg');
+      const food = await scanFoodPhoto([{ base64: jpeg.base64, mimeType: 'image/jpeg' }]);
       setFoodName(food.food_name || '');
       setEditCal(String(food.calories  ?? ''));
       setEditProt(String(food.protein  ?? ''));
