@@ -84,8 +84,8 @@ export default function CameraScreen() {
       setEditCarb(String(food.carbs    ?? ''));
       setEditFat(String(food.fat       ?? ''));
       setEditFiber(String(food.fiber   ?? ''));
-    } catch {
-      // AI failed — cells stay blank, user fills manually
+    } catch (err) {
+      setFoodName('AI error: ' + (err?.message || String(err)));
     } finally {
       setAiLoading(false);
     }

@@ -278,7 +278,9 @@ function PhotoScanner({ onClose }) {
       searchOffAllergens(food.food_name).then((offTags) => {
         setAllergenHits(checkAllergens(food.food_name, userAllergensRef.current, offTags));
       }).catch(() => {});
-    } catch {} finally { setAiLoading(false); }
+    } catch (err) {
+      setFoodName('AI error: ' + (err?.message || String(err)));
+    } finally { setAiLoading(false); }
   };
 
   const handleCapture = async () => {
