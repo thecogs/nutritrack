@@ -1,5 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, Alert,
   ActivityIndicator, ScrollView, TextInput, Image, Platform,
@@ -53,7 +53,7 @@ function MacroInput({ label, value, onChange, color, unit }) {
 
 // ── Barcode scanner ───────────────────────────────────────────────────────────
 
-function BarcodeScanner({ onClose }) {
+function BarcodeScanner({ onClose, initialDate }) {
   const [permission, requestPermission] = useCameraPermissions();
   const hasScanned = useRef(false);
   const [loading,        setLoading]        = useState(false);
@@ -103,7 +103,7 @@ function BarcodeScanner({ onClose }) {
   const handleLog = async () => {
     if (!foodData) return;
     try {
-      await addLog({ ...foodData, meal_type: mealType });
+      await addLog({ ...foodData, meal_type: mealType, date: initialDate || undefined });
       setModalVisible(false); reset();
       Alert.alert('Logged!', `${foodData.food_name} added to ${mealType}.`);
       onClose();
@@ -221,19 +221,20 @@ function todayLocalDate() {
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
 }
 
-function shiftDate(dateStr, days) {
-  const d = new Date(dateStr + 'T00:00:00');
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
+function formatShortDate(dateStr) {
+  const today = todayLocalDate();
+  const yesterday = new Date(today + 'T00:00:00'); yesterday.setDate(yesterday.getDate() - 1);
+  if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-function PhotoScanner({ onClose }) {
+function PhotoScanner({ onClose, initialDate }) {
   const [modalVisible, setModalVisible] = useState(false);
   const [aiLoading, setAiLoading]       = useState(false);
   const [photos,     setPhotos]         = useState([]); // [{ uri, base64, mimeType }]
   const [foodName,   setFoodName]       = useState('');
   const [mealType,   setMealType]       = useState(getDefaultMealType);
-  const [logDate,    setLogDate]        = useState(todayLocalDate);
+  const [logDate,    setLogDate]        = useState(() => initialDate || todayLocalDate());
   const [dataSource,   setDataSource]   = useState(null);
   const [base,         setBase]         = useState(null);
   const [servingGrams, setServingGrams] = useState(null);
@@ -275,7 +276,7 @@ function PhotoScanner({ onClose }) {
 
   const resetModal = () => {
     setPhotos([]); setFoodName(''); setCal(''); setProt(''); setCarb(''); setFat(''); setFiber(''); setSugar(''); setSatFat('');
-    setMealType(getDefaultMealType()); setLogDate(todayLocalDate()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
+    setMealType(getDefaultMealType()); setLogDate(initialDate || todayLocalDate()); setAiLoading(false); setDataSource(null); setBase(null); setServingGrams(null);
     setAllergenHits([]);
   };
 
@@ -431,21 +432,9 @@ function PhotoScanner({ onClose }) {
                 </TouchableOpacity>
               ))}
             </View>
-            <Text style={s.sectionLabel}>Log date</Text>
-            <View style={s.mealRow}>
-              {[0, -1, -2].map((offset) => {
-                const d = shiftDate(todayLocalDate(), offset);
-                const label = offset === 0 ? 'Today' : offset === -1 ? 'Yesterday' : d;
-                return (
-                  <TouchableOpacity key={offset} style={[s.mealBtn, logDate===d && s.mealBtnActive]} onPress={() => setLogDate(d)}>
-                    <Text style={[s.mealBtnText, logDate===d && s.mealBtnTextActive]}>{label}</Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
-            <View style={s.customRow}>
-              <TextInput style={s.customInput} placeholder="Or type a date: YYYY-MM-DD" placeholderTextColor="#404060" value={logDate} onChangeText={setLogDate} />
-            </View>
+            {logDate !== todayLocalDate() && (
+              <Text style={s.aiNote}>Logging to {formatShortDate(logDate)}</Text>
+            )}
             <View style={s.modalActions}>
               <TouchableOpacity style={s.cancelBtn} onPress={() => { setModalVisible(false); resetModal(); }}><Text style={s.cancelText}>Retake</Text></TouchableOpacity>
               <TouchableOpacity style={s.logBtn} onPress={handleLog}><Text style={s.logBtnText}>Add to Log</Text></TouchableOpacity>
@@ -460,12 +449,19 @@ function PhotoScanner({ onClose }) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function AITrackScreen() {
+  const { date: dateParam, mode: modeParam } = useLocalSearchParams();
+  const initialDate = typeof dateParam === 'string' && dateParam ? dateParam : null;
   const [mode, setMode] = useState(null); // null | 'barcode' | 'photo'
 
-  useFocusEffect(useCallback(() => { return () => setMode(null); }, []));
+  useFocusEffect(useCallback(() => {
+    if (modeParam === 'photo' || modeParam === 'barcode') setMode(modeParam);
+    return () => setMode(null);
+  }, [modeParam]));
 
-  if (mode === 'barcode') return <BarcodeScanner onClose={() => setMode(null)} />;
-  if (mode === 'photo')   return <PhotoScanner   onClose={() => setMode(null)} />;
+  const closeAndClearParams = () => { setMode(null); router.setParams({ mode: undefined, date: undefined }); };
+
+  if (mode === 'barcode') return <BarcodeScanner onClose={closeAndClearParams} initialDate={initialDate} />;
+  if (mode === 'photo')   return <PhotoScanner   onClose={closeAndClearParams} initialDate={initialDate} />;
 
   return (
     <View style={s.home}>

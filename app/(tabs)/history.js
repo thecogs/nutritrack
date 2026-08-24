@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { View, Text, TouchableOpacity, ScrollView, StyleSheet, Alert, Platform, Modal, TextInput, ActivityIndicator } from 'react-native';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, router } from 'expo-router';
 import { getLogsByDate, getGoals, getAllFoodLogs, getWeightLogs, importFromCSV, getTemplates, createTemplate, deleteTemplate, getTemplateItems, addTemplateItem, applyTemplate } from '../../services/db';
 import { searchFood, smartDescribeFoods, generateGroceryList } from '../../services/api';
 
@@ -507,6 +507,22 @@ export default function HistoryScreen() {
         </TouchableOpacity>
       </View>
 
+      {/* Add to this day */}
+      <View style={styles.addRow}>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => router.push({ pathname: '/', params: { date: toDateStr(selectedDate), openAdd: '1' } })}
+        >
+          <Text style={styles.addBtnText}>＋ Add Manual</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={() => router.push({ pathname: '/aitrack', params: { date: toDateStr(selectedDate), mode: 'photo' } })}
+        >
+          <Text style={styles.addBtnText}>📷 AI Log</Text>
+        </TouchableOpacity>
+      </View>
+
       {/* Summary */}
       <View style={styles.summaryCard}>
         {logs.length === 0 ? (
@@ -594,6 +610,10 @@ const styles = StyleSheet.create({
   navArrow:    { color: TEXT, fontSize: 34, lineHeight: 38 },
   navArrowDim: { color: '#3A3A5A' },
   dateLabel:   { color: TEXT, fontSize: 18, fontWeight: '700' },
+
+  addRow: { flexDirection: 'row', gap: 10, marginBottom: 16 },
+  addBtn: { flex: 1, paddingVertical: 13, borderRadius: 14, backgroundColor: G, alignItems: 'center' },
+  addBtnText: { color: '#fff', fontWeight: '700', fontSize: 14 },
 
   summaryCard: { backgroundColor: CARD, borderRadius: 20, padding: 18, marginBottom: 20 },
   emptyText:   { color: '#3A3A5A', textAlign: 'center', fontSize: 14, paddingVertical: 8 },

@@ -3,8 +3,8 @@ import {
   View, Text, TouchableOpacity,
   StyleSheet, Alert, ScrollView, Modal, TextInput, ActivityIndicator, Platform,
 } from 'react-native';
-import { useFocusEffect } from 'expo-router';
-import { getTodayLogs, getGoals, deleteLog, addLog, updateLog, getTodayActivity, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, updateFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
+import { useFocusEffect, useLocalSearchParams, router } from 'expo-router';
+import { getTodayLogs, getLogsByDate, getGoals, deleteLog, addLog, updateLog, getActivityLogs, logActivity, deleteActivity, getFavorites, addFavorite, removeFavorite, updateFavorite, getScheduledTemplates, applyTemplate } from '../../services/db';
 import { smartDescribeFoods, searchFood, searchOffAllergens } from '../../services/api';
 import { checkAllergens } from '../../services/allergens';
 import { getDefaultMealType } from '../../services/mealTime';
@@ -52,6 +52,19 @@ function formatTime(ts) {
   if (!ts) return '';
   const d = new Date(ts);
   return isNaN(d) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function todayLocalDate() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+function formatHeading(dateStr) {
+  const today = todayLocalDate();
+  if (dateStr === today) return 'Today';
+  const yesterday = new Date(today + 'T00:00:00'); yesterday.setDate(yesterday.getDate() - 1);
+  if (dateStr === yesterday.toISOString().slice(0, 10)) return 'Yesterday';
+  return new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 }
 
 // ── FavEditModal ──────────────────────────────────────────────────────────────
@@ -454,6 +467,10 @@ function ActivityModal({ visible, onClose, onSave }) {
 // ── Main screen ───────────────────────────────────────────────────────────────
 
 export default function LogScreen() {
+  const { date: dateParam, openAdd } = useLocalSearchParams();
+  const activeDate  = typeof dateParam === 'string' && dateParam ? dateParam : null;
+  const viewingPast = !!activeDate && activeDate !== todayLocalDate();
+
   const [logs,          setLogs]          = useState([]);
   const [activity,      setActivity]      = useState([]);
   const [goals,         setGoals]         = useState({ calories: 2000, protein: 150, carbs: 250, fat: 65, fiber: 30, include_activity: true });
@@ -464,15 +481,20 @@ export default function LogScreen() {
   const [view,          setView]          = useState('meals');
   const promptedRef = useRef(new Set());
 
+  const loadLogs     = () => (activeDate ? getLogsByDate(activeDate) : getTodayLogs());
+  const loadActivity = () => getActivityLogs(activeDate || todayLocalDate());
+
   const load = useCallback(async () => {
     try {
-      const [l, g, a, f] = await Promise.all([getTodayLogs(), getGoals(), getTodayActivity(), getFavorites()]);
+      const [l, g, a, f] = await Promise.all([loadLogs(), getGoals(), loadActivity(), getFavorites()]);
       setLogs(l || []);
       if (g) setGoals(g);
       setActivity(a || []);
       setFavs(f || []);
     } catch (e) { console.error(e); }
-  }, []);
+  }, [activeDate]);
+
+  useEffect(() => { if (openAdd === '1') setAddVisible(true); }, [openAdd]);
 
   const checkScheduled = useCallback(async () => {
     try {
@@ -500,7 +522,7 @@ export default function LogScreen() {
     } catch {}
   }, [load]);
 
-  useFocusEffect(useCallback(() => { load(); checkScheduled(); }, [load, checkScheduled]));
+  useFocusEffect(useCallback(() => { load(); if (!activeDate) checkScheduled(); }, [load, checkScheduled, activeDate]));
 
   const totals = logs.reduce(
     (acc, item) => ({ calories: acc.calories+(item.calories||0), protein: acc.protein+(item.protein||0), carbs: acc.carbs+(item.carbs||0), fat: acc.fat+(item.fat||0), fiber: acc.fiber+(item.fiber||0), sugar: acc.sugar+(item.sugar||0), sat_fat: acc.sat_fat+(item.sat_fat||0) }),
@@ -515,10 +537,10 @@ export default function LogScreen() {
   const over      = totals.calories > effectiveBudget;
 
   const handleDelete = async (id) => {
-    if (Platform.OS === 'web') { await deleteLog(id); setLogs((await getTodayLogs())||[]); return; }
+    if (Platform.OS === 'web') { await deleteLog(id); setLogs((await loadLogs())||[]); return; }
     Alert.alert('Remove entry?', '', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Remove', style: 'destructive', onPress: async () => { await deleteLog(id); setLogs((await getTodayLogs())||[]); } },
+      { text: 'Remove', style: 'destructive', onPress: async () => { await deleteLog(id); setLogs((await loadLogs())||[]); } },
     ]);
   };
 
@@ -539,28 +561,28 @@ export default function LogScreen() {
   };
 
   const handleUpdate = async (id, data) => {
-    try { await updateLog(id, data); setLogs((await getTodayLogs())||[]); }
+    try { await updateLog(id, data); setLogs((await loadLogs())||[]); }
     catch { Alert.alert('Error', 'Could not update entry.'); }
   };
 
   const handleAddFood = async (foodOrFoods) => {
     try {
       const items = Array.isArray(foodOrFoods) ? foodOrFoods : [foodOrFoods];
-      await Promise.all(items.map((f) => addLog(f)));
-      setLogs((await getTodayLogs())||[]);
+      await Promise.all(items.map((f) => addLog(activeDate ? { ...f, date: activeDate } : f)));
+      setLogs((await loadLogs())||[]);
     } catch { Alert.alert('Error', 'Could not save entry.'); }
   };
 
   const handleLogActivity = async ({ name, calories_burned, duration_mins }) => {
     try {
-      await logActivity({ name, calories_burned, duration_mins });
-      setActivity((await getTodayActivity())||[]);
+      await logActivity({ name, calories_burned, duration_mins, date: activeDate || undefined });
+      setActivity((await loadActivity())||[]);
     } catch { Alert.alert('Error', 'Could not log activity.'); }
   };
 
   const handleDeleteActivity = async (id) => {
     await deleteActivity(id);
-    setActivity((await getTodayActivity())||[]);
+    setActivity((await loadActivity())||[]);
   };
 
   const grouped = MEAL_TYPES.reduce((acc, type) => { acc[type] = logs.filter((l) => l.meal_type===type); return acc; }, {});
@@ -591,7 +613,14 @@ export default function LogScreen() {
       <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardDismissMode="on-drag">
 
         <View style={styles.heroCard}>
-          <Text style={styles.heroDate}>Today</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Text style={styles.heroDate}>{activeDate ? formatHeading(activeDate) : 'Today'}</Text>
+            {viewingPast && (
+              <TouchableOpacity onPress={() => router.replace('/')}>
+                <Text style={styles.backToTodayText}>Back to Today</Text>
+              </TouchableOpacity>
+            )}
+          </View>
           <View style={styles.heroCenter}>
             <View style={[styles.heroRing, { borderColor: over ? 'rgba(224,85,85,0.3)' : 'rgba(182,168,162,0.18)' }]}>
               <Text style={[styles.heroNumber, over && { color: '#E05555' }]}>{remaining}</Text>
@@ -694,6 +723,7 @@ const styles = StyleSheet.create({
 
   heroCard:   { backgroundColor: CARD, borderRadius: 22, padding: 20, marginBottom: 20 },
   heroDate:   { color: '#4A4D5E', fontSize: 11, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 1.2 },
+  backToTodayText: { color: G, fontSize: 11, fontWeight: '700' },
   heroCenter: { alignItems: 'center', marginVertical: 18 },
   heroRing:   { width: 160, height: 160, borderRadius: 80, borderWidth: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: BG },
   heroNumber: { color: TEXT, fontSize: 42, fontWeight: '800', lineHeight: 46 },
