@@ -35,7 +35,7 @@ async function claude(body, ms = 18000) {
   const res  = await fetchWithTimeout(url, { method: 'POST', headers, body: JSON.stringify(body) }, ms);
   const data = await res.json();
   if (!res.ok) throw new Error(data.error?.message || `Claude error ${res.status}`);
-  return data.content?.[0]?.text ?? '';
+  return data.content?.find((b) => b.type === 'text')?.text ?? '';
 }
 
 function parseJSON(text) {
