@@ -245,7 +245,7 @@ async function importCSV() {
   if (Platform.OS === 'web') {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = '.csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    input.accept = '.csv,.xlsx';
     input.onchange = async (e) => {
       const file = e.target.files[0];
       if (!file) return;
