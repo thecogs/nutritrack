@@ -1,17 +1,16 @@
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
 
-  const key = process.env.GEMINI_API_KEY;
-  if (!key) return res.status(500).json({ error: { message: 'GEMINI_API_KEY not set' } });
+  const key = process.env.ANTHROPIC_API_KEY;
+  if (!key) return res.status(500).json({ error: { message: 'ANTHROPIC_API_KEY not set' } });
 
   try {
-    const model = req.body.model || 'gemini-2.5-flash';
-    delete req.body.model;
-
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`, {
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
-        'Content-Type': 'application/json',
+        'content-type': 'application/json',
+        'x-api-key': key,
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify(req.body),
     });
