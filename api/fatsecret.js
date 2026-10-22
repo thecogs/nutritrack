@@ -1,14 +1,26 @@
+const rateLimited = require('./_ratelimit');
+
+// Only food search is exposed. The caller used to be able to choose any
+// FatSecret API method; now `method` is fixed and the query is length-capped.
+const MAX_QUERY_CHARS = 100;
+
 module.exports = async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
+  if (rateLimited(req, 'fatsecret', 60, 10 * 60 * 1000)) {
+    return res.status(429).json({ error: { message: 'Too many requests, try again later' } });
+  }
 
   const clientId = process.env.FATSECRET_CLIENT_ID;
   const clientSecret = process.env.FATSECRET_CLIENT_SECRET;
-  
+
   if (!clientId || !clientSecret) {
-    return res.status(500).json({ error: { message: 'FatSecret credentials not set' } });
+    return res.status(503).json({ error: { message: 'FatSecret search is not configured' } });
   }
 
-  const { query, method = 'foods.search' } = req.body;
+  const query = typeof req.body?.query === 'string' ? req.body.query.trim() : '';
+  if (!query || query.length > MAX_QUERY_CHARS) {
+    return res.status(400).json({ error: { message: 'Invalid query' } });
+  }
 
   try {
     // 1. Get OAuth Token
@@ -21,15 +33,15 @@ module.exports = async function handler(req, res) {
       },
       body: 'grant_type=client_credentials&scope=basic'
     });
-    
+
     const tokenData = await tokenResponse.json();
     if (!tokenResponse.ok) {
-      throw new Error(tokenData.error_description || 'Failed to get FatSecret token');
+      throw new Error('Failed to get FatSecret token');
     }
-    
+
     // 2. Fetch Data
     const params = new URLSearchParams({
-      method: method,
+      method: 'foods.search',
       search_expression: query,
       format: 'json',
       max_results: '5'
@@ -45,6 +57,6 @@ module.exports = async function handler(req, res) {
     const data = await dataResponse.json();
     res.status(dataResponse.status).json(data);
   } catch (err) {
-    res.status(500).json({ error: { message: err.message } });
+    res.status(502).json({ error: { message: 'FatSecret request failed' } });
   }
 };
